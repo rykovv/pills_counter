@@ -4,44 +4,46 @@
 #include "esp_camera.h"
 #include "esp_wifi.h"
 #include "OneButton.h"
-#include "OLEDDisplayUi.h"
 
 #define ENABLE_SSD1306
-#define SOFTAP_MODE       //The comment will be connected to the specified ssid
 
-#define WIFI_SSID   "SpectrumSetup-28"
-#define WIFI_PASSWD "heartylion234"
+#define BAUDRATE          115200
 
-#define PWDN_GPIO_NUM 26
-#define RESET_GPIO_NUM -1
-#define XCLK_GPIO_NUM 32
-#define SIOD_GPIO_NUM 13
-#define SIOC_GPIO_NUM 12
+/* BOARD PINS */
+#define PWDN_GPIO_NUM     26
+#define RESET_GPIO_NUM    -1
+#define XCLK_GPIO_NUM     32
+#define SIOD_GPIO_NUM     13
+#define SIOC_GPIO_NUM     12
 
-#define Y9_GPIO_NUM 39
-#define Y8_GPIO_NUM 36
-#define Y7_GPIO_NUM 23
-#define Y6_GPIO_NUM 18
-#define Y5_GPIO_NUM 15
-#define Y4_GPIO_NUM 4
-#define Y3_GPIO_NUM 14
-#define Y2_GPIO_NUM 5
-#define VSYNC_GPIO_NUM 27
-#define HREF_GPIO_NUM 25
-#define PCLK_GPIO_NUM 19
+#define Y9_GPIO_NUM       39
+#define Y8_GPIO_NUM       36
+#define Y7_GPIO_NUM       23
+#define Y6_GPIO_NUM       18
+#define Y5_GPIO_NUM       15
+#define Y4_GPIO_NUM       4
+#define Y3_GPIO_NUM       14
+#define Y2_GPIO_NUM       5
+#define VSYNC_GPIO_NUM    27
+#define HREF_GPIO_NUM     25
+#define PCLK_GPIO_NUM     19
 
-#define I2C_SDA 21
-#define I2C_SCL 22
+#define I2C_SDA           21
+#define I2C_SCL           22
 
+/* Enabling OLED */
 #ifdef ENABLE_SSD1306
 #include "SSD1306.h"
-//#include "OLEDDisplayUi.h"
-#define SSD1306_ADDRESS 0x3c
+#include "OLEDDisplayUi.h"
+#define SSD1306_ADDRESS   0x3c
+
 SSD1306 oled(SSD1306_ADDRESS, I2C_SDA, I2C_SCL);
 OLEDDisplayUi ui(&oled);
 #endif
 
+/* PIR Sensor pin */
 #define AS312_PIN 33
+/* Board button */
 #define BUTTON_1 34
 String ip;
 EventGroupHandle_t evGroup;
@@ -50,6 +52,7 @@ OneButton button1(BUTTON_1, true);
 
 void startCameraServer();
 
+/* Some functionality associated with the button1 */
 void button1Func()
 {
     static bool en = false;
@@ -61,6 +64,7 @@ void button1Func()
     xEventGroupSetBits(evGroup, 1);
 }
 
+/* Refresh OLED */
 #ifdef ENABLE_SSD1306
 void drawFrame1(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -93,20 +97,26 @@ void drawFrame2(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int1
     display->drawString(0 + x, 32 + y, altitude);
     display->drawString(0 + x, 48 + y, humidity);
 #endif
+    display->setFont(ArialMT_Plain_16);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->drawString(0 + x, 0 + y, "Number of pills:");
+    display->drawString(0 + x, 16 + y, "UNKNOWN");
 }
 
 FrameCallback frames[] = {drawFrame1, drawFrame2};
 #define FRAMES_SIZE (sizeof(frames) / sizeof(frames[0]))
 #endif
 
+////////////////////////////////////////////////////////////////////////////////////////
 void setup()
 {
-    Serial.begin(115200);
+    Serial.begin(BAUDRATE);
     Serial.setDebugOutput(true);
     Serial.println();
 
     pinMode(AS312_PIN, INPUT);
 
+    // config OLED
 #ifdef ENABLE_SSD1306
     oled.init();
     oled.setFont(ArialMT_Plain_16);
@@ -115,21 +125,15 @@ void setup()
     oled.drawString(oled.getWidth() / 2, oled.getHeight() / 2, "TTGO Camera");
     oled.display();
 #endif
-
+    
+    /* Create Event Group */
     if (!(evGroup = xEventGroupCreate())) {
         Serial.println("evGroup Fail");
         while (1);
     }
     xEventGroupSetBits(evGroup, 1);
 
-#ifdef ENABLE_BME280
-    Wire.begin(I2C_SDA, I2C_SCL);
-    if (!bme.begin(BEM280_ADDRESS)) {
-        Serial.println("Could not find a valid BME280 sensor, check wiring!");
-        while (1);
-    }
-#endif
-
+    /* config camera */
     camera_config_t config;
     config.ledc_channel = LEDC_CHANNEL_0;
     config.ledc_timer = LEDC_TIMER_0;
@@ -168,13 +172,15 @@ void setup()
         while (1);
     }
 
-    //drop down frame size for higher initial frame rate
+    //set up camera sensor
     sensor_t *s = esp_camera_sensor_get();
-    s->set_framesize(s, FRAMESIZE_QVGA);
+    s->set_framesize(s, FRAMESIZE_VGA);
+    // TODO
 
+    /* Attach button1 functionality */
     button1.attachClick(button1Func);
 
-#ifdef SOFTAP_MODE
+    /* Setup AP */
     uint8_t mac[6];
     char buff[128];
     WiFi.mode(WIFI_AP);
@@ -187,15 +193,6 @@ void setup()
         Serial.println("AP Begin Failed.");
         while (1);
     }
-#else
-    WiFi.begin(WIFI_SSID, WIFI_PASSWD);
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
-    Serial.println("");
-    Serial.println("WiFi connected");
-#endif
 
 #ifdef ENABLE_SSD1306
     oled.clear();
@@ -203,10 +200,12 @@ void setup()
     oled.display();
 #endif
 
+    /* Start camera server */
     startCameraServer();
 
     delay(50);
 
+    /* Do cool unnecessary staff with OLED */
 #ifdef ENABLE_SSD1306
     ui.setTargetFPS(60);
     ui.setIndicatorPosition(BOTTOM);
@@ -217,12 +216,9 @@ void setup()
     ui.init();
 #endif
 
-#ifdef SOFTAP_MODE
+
     ip = WiFi.softAPIP().toString();
-    Serial.printf("\nAp Started .. Please Connect %s hotspot\n", buff);
-#else
-    ip = WiFi.localIP().toString();
-#endif
+    Serial.printf("\nAP Started .. Please Connect %s hotspot\n", buff);
 
     Serial.print("Camera Ready! Use 'http://");
     Serial.print(ip);
