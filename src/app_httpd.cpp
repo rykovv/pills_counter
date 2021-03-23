@@ -68,6 +68,7 @@ static size_t jpg_encode_stream(void * arg, size_t index, const void* data, size
 }
 
 static esp_err_t index_handler(httpd_req_t *req) {
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     return httpd_resp_send(req, (const char *)index_html, index_html_len);
 }
 
@@ -108,6 +109,7 @@ static esp_err_t pills_handler(httpd_req_t *req) {
 
     sprintf(ctr_str, "%d", rand());
     Serial.printf("pills_handler => '%s'\n", ctr_str);
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     res = httpd_resp_send(req, (const char *)ctr_str, strlen(ctr_str));
     
     return res;
@@ -226,15 +228,16 @@ void startCameraServer(){
 
     ra_filter_init(&ra_filter, 20);
     Serial.printf("Starting web server on port: '%d'", config.server_port);
-    if (httpd_start(&camera_httpd, &config) == ESP_OK) {
-        httpd_register_uri_handler(camera_httpd, &index_uri);
-        httpd_register_uri_handler(camera_httpd, &capture_uri);
-        httpd_register_uri_handler(camera_httpd, &stream_uri);
+    if (httpd_start(&pills_httpd, &config) == ESP_OK) {
+        httpd_register_uri_handler(pills_httpd, &index_uri);
+        httpd_register_uri_handler(pills_httpd, &pills_uri);
+        
     }
 
     config.server_port++;
     config.ctrl_port++;
-    if (httpd_start(&pills_httpd, &config) == ESP_OK) {
-        httpd_register_uri_handler(pills_httpd, &pills_uri);
+    if (httpd_start(&camera_httpd, &config) == ESP_OK) {
+        httpd_register_uri_handler(camera_httpd, &capture_uri);
+        httpd_register_uri_handler(camera_httpd, &stream_uri);
     }
 }

@@ -5,7 +5,6 @@ const uint8_t index_html[] = R"=====(<!doctype html>
   <head>
     <meta charset="utf-8">
     <title>ESP32 Pills Counter</title>
-    <script type="text/javascript" srs="http://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js">
   </head>
   <body>
     <section class="main">
@@ -16,7 +15,7 @@ const uint8_t index_html[] = R"=====(<!doctype html>
 
           <figure>
             <div id="stream-container" class="image-container">
-              <img id="stream" src="/stream">
+              <img id="stream" src="http://2.2.2.1:81/stream">
             </div>
           </figure>
         </center>
@@ -28,9 +27,8 @@ const uint8_t index_html[] = R"=====(<!doctype html>
   document.addEventListener('DOMContentLoaded', function (event) {
     var pills_view = document.getElementById("pills_ctr");
     (function worker() {
-      $.get('http://2.2.2.1:81/pills', function(response) {
-        pills_view.html(response.data);
-        console.log(response.data);
+      fetch('/pills').then(resp => resp.text()).then(text => {
+        pills_view.innerText = text;
       });
       setTimeout(worker, 1000);
 	  })();
