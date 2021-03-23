@@ -175,7 +175,33 @@ void setup()
     //set up camera sensor
     sensor_t *s = esp_camera_sensor_get();
     s->set_framesize(s, FRAMESIZE_VGA);
-    // TODO
+    s->set_vflip(s, 1);
+    s->set_special_effect(s, 2);
+    /*
+    s->set_quality(s, 10);
+    s->set_contrast(s, 0);
+    s->set_brightness(s, 0);
+    s->set_saturation(s, 0);
+    s->set_gainceiling(s, GAINCEILING_2X);
+    s->set_colorbar(s, 0);
+    s->set_whitebal(s, 0);
+    s->set_gain_ctrl(s, 1);
+    s->set_exposure_ctrl(s, 1);
+    s->set_hmirror(s, 0);
+    s->set_vflip(s, 1);
+    s->set_awb_gain(s, 1);
+    s->set_agc_gain(s, 10);
+    s->set_aec_value(s, 1);
+    s->set_aec2(s, 0);
+    s->set_dcw(s, 1);
+    s->set_bpc(s, 0);
+    s->set_wpc(s, 1);
+    s->set_raw_gma(s, 1);
+    s->set_lenc(s, 1);
+    s->set_special_effect(s, 0);
+    s->set_wb_mode(s, 1);
+    s->set_ae_level(s, 0);
+    */
 
     /* Attach button1 functionality */
     button1.attachClick(button1Func);
