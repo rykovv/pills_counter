@@ -1,9 +1,13 @@
+#include "Arduino.h"
 #include <WiFi.h>
 #include "freertos/event_groups.h"
 #include <Wire.h>
 #include "esp_camera.h"
 #include "esp_wifi.h"
 #include "OneButton.h"
+
+#include "model_random_forest.h"
+#include "samples.h"
 
 #define ENABLE_SSD1306
 
@@ -107,6 +111,9 @@ FrameCallback frames[] = {drawFrame1, drawFrame2};
 #define FRAMES_SIZE (sizeof(frames) / sizeof(frames[0]))
 #endif
 
+Eloquent::ML::Port::RandomForest classifier;
+void test_classifier();
+
 ////////////////////////////////////////////////////////////////////////////////////////
 void setup()
 {
@@ -156,7 +163,7 @@ void setup()
     config.xclk_freq_hz = 20000000;
     config.pixel_format = PIXFORMAT_JPEG;
     //init with high specs to pre-allocate larger buffers
-    config.frame_size = FRAMESIZE_UXGA;
+    config.frame_size = FRAMESIZE_QVGA;
     config.jpeg_quality = 10;
     config.fb_count = 2;
 
@@ -174,8 +181,7 @@ void setup()
 
     //set up camera sensor
     sensor_t *s = esp_camera_sensor_get();
-    s->set_framesize(s, FRAMESIZE_VGA);
-    s->set_vflip(s, 1);
+    //s->set_vflip(s, 1);
     s->set_special_effect(s, 2);
     /*
     s->set_quality(s, 10);
@@ -213,7 +219,7 @@ void setup()
     IPAddress apIP = IPAddress(2, 2, 2, 1);
     WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
     esp_wifi_get_mac(WIFI_IF_AP, mac);
-    sprintf(buff, "TTGO-CAMERA-%02X:%02X", mac[4], mac[5]);
+    sprintf(buff, "PILLS-COUNTER-%02X:%02X", mac[4], mac[5]);
     Serial.printf("Device AP Name:%s\n", buff);
     if (!WiFi.softAP(buff, NULL, 1, 0)) {
         Serial.println("AP Begin Failed.");
@@ -260,4 +266,44 @@ void loop()
 #ifdef ENABLE_SSD1306
     }
 #endif
+}
+
+void test_classifier() {
+    uint32_t mills = millis();
+    uint32_t elapsed = 0;
+    while (1) {
+        Serial.print("Predicted class: (none)");
+        mills = millis();
+        Serial.println(classifier.predictLabel(sample1));
+        elapsed = millis() - mills;
+        Serial.printf("elapsed: %d ms\n", elapsed);
+        
+
+        Serial.print("Predicted class: (pill)");
+        mills = millis();
+        Serial.println(classifier.predictLabel(sample2));
+        elapsed = millis() - mills;
+        Serial.printf("elapsed: %d ms\n", elapsed);
+
+
+        Serial.print("Predicted class: (none)");
+        mills = millis();
+        Serial.println(classifier.predictLabel(sample3));
+        elapsed = millis() - mills;
+        Serial.printf("elapsed: %d ms\n", elapsed);
+
+
+        Serial.print("Predicted class: (pill)");
+        mills = millis();
+        Serial.println(classifier.predictLabel(sample4));
+        elapsed = millis() - mills;
+        Serial.printf("elapsed: %d ms\n", elapsed);
+
+
+        Serial.print("Predicted class: (pill)");
+        mills = millis();
+        Serial.println(classifier.predictLabel(sample5));
+        elapsed = millis() - mills;
+        Serial.printf("elapsed: %d ms\n", elapsed); 
+    }
 }
