@@ -15,7 +15,7 @@ const uint8_t index_html[] = R"=====(<!doctype html>
 
           <figure>
             <div id="stream-container" class="image-container">
-              <img id="stream" src="http://2.2.2.1:81/stream">
+              <img id="stream" src="http://2.2.2.1:81/counter_stream">
             </div>
           </figure>
         </center>

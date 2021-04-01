@@ -10,11 +10,11 @@ namespace Eloquent {
                     /**
                     * Predict class for features vector
                     */
-                    int predict(const float *x) {
-                        uint8_t votes[2] = { 0 };
+                    int predict(uint8_t *x) {
+                        uint8_t votes[2] = { 0 };      
                         // tree #1
-                        if (x[2825] <= 206.5) {
-                            if (x[938] <= 68.0) {
+                        if (x[343] <= 205) {
+                            if (x[10] <= 84) {       
                                 votes[1] += 1;
                             }
 
@@ -28,8 +28,23 @@ namespace Eloquent {
                         }
 
                         // tree #2
-                        if (x[2833] <= 207.0) {
-                            if (x[132] <= 88.0) {
+                        if (x[372] <= 167) {
+                            votes[0] += 1;
+                        }
+
+                        else {
+                            if (x[167] <= 178) {
+                                votes[1] += 1;
+                            }
+
+                            else {
+                                votes[0] += 1;
+                            }
+                        }
+
+                        // tree #3
+                        if (x[375] <= 206) {
+                            if (x[458] <= 95) {
                                 votes[1] += 1;
                             }
 
@@ -42,24 +57,9 @@ namespace Eloquent {
                             votes[1] += 1;
                         }
 
-                        // tree #3
-                        if (x[2171] <= 155.0) {
-                            votes[0] += 1;
-                        }
-
-                        else {
-                            if (x[91] <= 177.0) {
-                                votes[1] += 1;
-                            }
-
-                            else {
-                                votes[0] += 1;
-                            }
-                        }
-
                         // tree #4
-                        if (x[2763] <= 204.5) {
-                            if (x[2205] <= 76.5) {
+                        if (x[396] <= 206) {
+                            if (x[47] <= 70) {
                                 votes[1] += 1;
                             }
 
@@ -73,8 +73,8 @@ namespace Eloquent {
                         }
 
                         // tree #5
-                        if (x[2826] <= 205.5) {
-                            if (x[1047] <= 79.5) {
+                        if (x[351] <= 208) {
+                            if (x[335] <= 70) {
                                 votes[1] += 1;
                             }
 
@@ -88,12 +88,8 @@ namespace Eloquent {
                         }
 
                         // tree #6
-                        if (x[2507] <= 163.5) {
-                            votes[0] += 1;
-                        }
-
-                        else {
-                            if (x[3443] <= 196.5) {
+                        if (x[349] <= 210) {
+                            if (x[154] <= 71) {
                                 votes[1] += 1;
                             }
 
@@ -102,9 +98,13 @@ namespace Eloquent {
                             }
                         }
 
+                        else {
+                            votes[1] += 1;
+                        }
+
                         // tree #7
-                        if (x[2705] <= 207.5) {
-                            if (x[3839] <= 95.5) {
+                        if (x[393] <= 213) {
+                            if (x[117] <= 101) {
                                 votes[1] += 1;
                             }
 
@@ -118,8 +118,8 @@ namespace Eloquent {
                         }
 
                         // tree #8
-                        if (x[2763] <= 204.5) {
-                            if (x[208] <= 82.5) {
+                        if (x[397] <= 220) {
+                            if (x[54] <= 79) {
                                 votes[1] += 1;
                             }
 
@@ -133,8 +133,8 @@ namespace Eloquent {
                         }
 
                         // tree #9
-                        if (x[2959] <= 206.5) {
-                            if (x[929] <= 73.0) {
+                        if (x[397] <= 211) {
+                            if (x[52] <= 73) {
                                 votes[1] += 1;
                             }
 
@@ -148,23 +148,23 @@ namespace Eloquent {
                         }
 
                         // tree #10
-                        if (x[2892] <= 208.0) {
-                            if (x[935] <= 67.5) {
-                                votes[1] += 1;
-                            }
-
-                            else {
-                                votes[0] += 1;
-                            }
-                        }
-
-                        else {
+                        if (x[76] <= 101) {
                             votes[1] += 1;
                         }
 
+                        else {
+                            if (x[346] <= 221) {
+                                votes[0] += 1;
+                            }
+
+                            else {
+                                votes[1] += 1;
+                            }
+                        }
+
                         // tree #11
-                        if (x[2894] <= 204.5) {
-                            if (x[2218] <= 63.5) {
+                        if (x[398] <= 212) {
+                            if (x[121] <= 87) {
                                 votes[1] += 1;
                             }
 
@@ -178,13 +178,19 @@ namespace Eloquent {
                         }
 
                         // tree #12
-                        if (x[2820] <= 210.0) {
-                            if (x[855] <= 94.0) {
-                                votes[1] += 1;
+                        if (x[367] <= 205) {
+                            if (x[204] <= 205) {
+                                if (x[92] <= 95) {
+                                    votes[1] += 1;
+                                }
+
+                                else {
+                                    votes[0] += 1;
+                                }
                             }
 
                             else {
-                                votes[0] += 1;
+                                votes[1] += 1;
                             }
                         }
 
@@ -193,12 +199,12 @@ namespace Eloquent {
                         }
 
                         // tree #13
-                        if (x[924] <= 99.0) {
+                        if (x[125] <= 102) {
                             votes[1] += 1;
                         }
 
                         else {
-                            if (x[2968] <= 221.5) {
+                            if (x[206] <= 218) {
                                 votes[0] += 1;
                             }
 
@@ -208,8 +214,23 @@ namespace Eloquent {
                         }
 
                         // tree #14
-                        if (x[2445] <= 204.5) {
-                            if (x[517] <= 68.5) {
+                        if (x[322] <= 160) {
+                            votes[0] += 1;
+                        }
+
+                        else {
+                            if (x[550] <= 195) {
+                                votes[1] += 1;
+                            }
+
+                            else {
+                                votes[0] += 1;
+                            }
+                        }
+
+                        // tree #15
+                        if (x[397] <= 211) {
+                            if (x[535] <= 92) {
                                 votes[1] += 1;
                             }
 
@@ -222,18 +243,9 @@ namespace Eloquent {
                             votes[1] += 1;
                         }
 
-                        // tree #15
-                        if (x[2956] <= 210.0) {
-                            votes[0] += 1;
-                        }
-
-                        else {
-                            votes[1] += 1;
-                        }
-
                         // tree #16
-                        if (x[2628] <= 209.0) {
-                            if (x[4004] <= 83.5) {
+                        if (x[396] <= 206) {
+                            if (x[507] <= 91) {
                                 votes[1] += 1;
                             }
 
@@ -247,23 +259,8 @@ namespace Eloquent {
                         }
 
                         // tree #17
-                        if (x[84] <= 137.5) {
-                            if (x[3215] <= 110.0) {
-                                votes[0] += 1;
-                            }
-
-                            else {
-                                votes[1] += 1;
-                            }
-                        }
-
-                        else {
-                            votes[0] += 1;
-                        }
-
-                        // tree #18
-                        if (x[2561] <= 207.5) {
-                            if (x[3928] <= 86.5) {
+                        if (x[324] <= 207) {
+                            if (x[101] <= 88) {
                                 votes[1] += 1;
                             }
 
@@ -276,9 +273,18 @@ namespace Eloquent {
                             votes[1] += 1;
                         }
 
+                        // tree #18
+                        if (x[345] <= 205) {
+                            votes[0] += 1;
+                        }
+
+                        else {
+                            votes[1] += 1;
+                        }
+
                         // tree #19
-                        if (x[147] <= 148.5) {
-                            if (x[2759] <= 141.0) {
+                        if (x[96] <= 149) {
+                            if (x[306] <= 115) {
                                 votes[0] += 1;
                             }
 
@@ -292,8 +298,8 @@ namespace Eloquent {
                         }
 
                         // tree #20
-                        if (x[2699] <= 205.5) {
-                            if (x[4194] <= 91.5) {
+                        if (x[325] <= 210) {
+                            if (x[544] <= 94) {
                                 votes[1] += 1;
                             }
 
@@ -323,7 +329,7 @@ namespace Eloquent {
                     /**
                     * Predict readable class name
                     */
-                    const char* predictLabel(const float *x) {
+                    const char* predictLabel(uint8_t *x) {
                         return idxToLabel(predict(x));
                     }
 
@@ -342,7 +348,7 @@ namespace Eloquent {
                     }
 
                 protected:
-            };
+                };
+            }
         }
     }
-}
