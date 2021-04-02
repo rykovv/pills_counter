@@ -11,7 +11,8 @@
 typedef enum {
     PILL_NO = 0,
     PILL_DETECTED,
-    PILL_DISAPPEARED
+    PILL_DISAPPEARED,
+    PILL_DISAPPEARED_HYS_1
 } pill_state_t;
 
 typedef struct {
@@ -339,10 +340,27 @@ static esp_err_t counter_stream_handler(httpd_req_t *req) {
                                     detline[nframe] = PILL_DISAPPEARED;
                                     Serial.printf("disap pill f = %d\n", nframe);
 
-                                    // 3 is max number of frames that can detect one pill simultanously
-                                    uint8_t pstart = nframe;
-                                    while (detline[pstart] != PILL_NO && pstart > 0) pstart--;
+                                    // get the first PILL_NO
+                                    int16_t pstart = nframe;
+                                    while (pstart >= 0 && detline[pstart] != PILL_NO) pstart--;
+                                    // pstart = -1 [++ -> 0] or 
+                                    // detline[pstart] = PILL_NO [++ -> PILL_DISAPPEARED or PILL_DETECTED]
+                                    pstart++;
+                                    while (pstart < NUM_FRAMES && detline[pstart] == PILL_DISAPPEARED) pstart++;
+                                    
+                                    // if all frames are PILL_DISAPPEARED then pstart is on PILL_NO or overflowed
+                                    if (pstart == NUM_FRAMES || detline[pstart] == PILL_NO) {
+                                        pills_ctr++;
+                                        // pstart = NUM_FRAMES [-- -> NUM_FRAMES-1] or 
+                                        // detline[pstart] = PILL_NO [-- -> PILL_DISAPPEARED]
+                                        pstart--;
+                                        while (pstart >= 0 && detline[pstart] == PILL_DISAPPEARED) {
+                                            detline[pstart] = PILL_NO;
+                                            pstart--;
+                                        }
+                                    }
 
+                                    /*
                                     uint16_t fprev = PILL_NO;
                                     for (uint16_t i = pstart; i < NUM_FRAMES; i++) {
                                         if (fprev == PILL_NO && detline[i] == PILL_DISAPPEARED) {
@@ -368,7 +386,7 @@ static esp_err_t counter_stream_handler(httpd_req_t *req) {
                                             Serial.printf("pill summed f = %d\n", i-1);
                                         }
                                     }
-                                    
+                                    */
                                 }
                             }
                         }
