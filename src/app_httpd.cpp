@@ -339,14 +339,15 @@ static esp_err_t counter_stream_handler(httpd_req_t *req) {
                                 if (detline[nframe] == PILL_DETECTED) {
                                     detline[nframe] = PILL_DISAPPEARED;
                                     Serial.printf("disap pill f = %d\n", nframe);
-
+                                } else if (detline[nframe] == PILL_DISAPPEARED) {
+                                    detline[nframe] = PILL_DISAPPEARED_HYS_1;
                                     // get the first PILL_NO
                                     int16_t pstart = nframe;
                                     while (pstart >= 0 && detline[pstart] != PILL_NO) pstart--;
                                     // pstart = -1 [++ -> 0] or 
                                     // detline[pstart] = PILL_NO [++ -> PILL_DISAPPEARED or PILL_DETECTED]
                                     pstart++;
-                                    while (pstart < NUM_FRAMES && detline[pstart] == PILL_DISAPPEARED) pstart++;
+                                    while (pstart < NUM_FRAMES && detline[pstart] == PILL_DISAPPEARED_HYS_1) pstart++;
                                     
                                     // if all frames are PILL_DISAPPEARED then pstart is on PILL_NO or overflowed
                                     if (pstart == NUM_FRAMES || detline[pstart] == PILL_NO) {
@@ -354,7 +355,8 @@ static esp_err_t counter_stream_handler(httpd_req_t *req) {
                                         // pstart = NUM_FRAMES [-- -> NUM_FRAMES-1] or 
                                         // detline[pstart] = PILL_NO [-- -> PILL_DISAPPEARED]
                                         pstart--;
-                                        while (pstart >= 0 && detline[pstart] == PILL_DISAPPEARED) {
+                                        Serial.printf("pill summed f = %d\n", pstart);
+                                        while (pstart >= 0 && detline[pstart] == PILL_DISAPPEARED_HYS_1) {
                                             detline[pstart] = PILL_NO;
                                             pstart--;
                                         }
