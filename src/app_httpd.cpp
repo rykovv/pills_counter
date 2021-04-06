@@ -12,7 +12,8 @@ typedef enum {
     PILL_NO = 0,
     PILL_DETECTED,
     PILL_DISAPPEARED,
-    PILL_DISAPPEARED_HYS_1
+    PILL_DISAPPEARED_HYS_1,
+    PILL_EXPECTED
 } pill_state_t;
 
 typedef struct {
@@ -157,6 +158,83 @@ static uint16_t one_detection_line(dl_matrix3du_t *image_matrix) {
     return pctr;
 }
 
+static uint16_t two_detection_lines(dl_matrix3du_t *image_matrix, uint16_t detline[NUM_FRAMES][2]) {
+    uint16_t si = 0;
+    uint16_t pctr = 0;
+    uint16_t nframe = 0;
+
+    uint8_t subframe[SUBFRAME_SIZE] = {0,};
+
+    for (uint16_t i = 0; i < (image_matrix->w-SUBFRAME_WIDTH)*3; i+=SUBFRAME_STEP*3) {
+        for (uint16_t h = 0; h < SUBFRAME_HIGHT; h++) {
+            for (uint16_t w = 0; w < SUBFRAME_WIDTH*3; w+=3) {
+                //                        intraframe         within frame     
+                subframe[si++] = image_matrix->item[i + h*image_matrix->w*3+w];
+            }
+        }
+        si = 0;
+
+        // First line detection
+        nframe = i/(SUBFRAME_STEP*3);
+        if (classifier.predict40(subframe)) {
+            if (detline[nframe][0] == PILL_NO) {
+                detline[nframe][0] = PILL_DETECTED;
+                Serial.printf("line 1 found pill f = %d\n", nframe);
+            }
+        } else {
+            if (detline[nframe][0] == PILL_DETECTED) {
+                detline[nframe][0] = PILL_NO;
+                detline[nframe][1] = PILL_EXPECTED;
+                Serial.printf("line 1 disap pill f = %d\n", nframe);
+            }
+        }
+
+        // second line detection (adjacent to the first one)
+        for (uint16_t h = SUBFRAME_HIGHT; h < SUBFRAME_HIGHT*2; h++) {
+            for (uint16_t w = 0; w < SUBFRAME_WIDTH*3; w+=3) {
+                //                        intraframe         within frame     
+                subframe[si++] = image_matrix->item[i + h*image_matrix->w*3+w];
+            }
+        }
+        si = 0;
+
+        if (classifier.predict40(subframe)) {
+            if (detline[nframe][1] == PILL_NO || detline[nframe][1] == PILL_EXPECTED) {
+                detline[nframe][1] = PILL_DETECTED;
+                Serial.printf("line 2 found pill f = %d\n", nframe);
+            }
+        } else {
+            if (detline[nframe][1] == PILL_DETECTED) {
+                detline[nframe][1] = PILL_DISAPPEARED;
+                Serial.printf("line 2 disap pill f = %d\n", nframe);
+
+                // get the first PILL_NO
+                int16_t pstart = nframe;
+                while (pstart >= 0 && detline[pstart][1] != PILL_NO) pstart--;
+                // pstart = -1 [++ -> 0] or 
+                // detline[pstart] = PILL_NO [++ -> PILL_DISAPPEARED or PILL_DETECTED]
+                pstart++;
+                while (pstart < NUM_FRAMES && (detline[pstart][1] == PILL_DISAPPEARED || detline[pstart][1] == PILL_EXPECTED)) pstart++;
+                
+                // if all frames are PILL_DISAPPEARED then pstart is on PILL_NO or overflowed
+                if (pstart == NUM_FRAMES || detline[pstart][1] == PILL_NO) {
+                    pctr++;
+                    // pstart = NUM_FRAMES [-- -> NUM_FRAMES-1] or 
+                    // detline[pstart] = PILL_NO [-- -> PILL_DISAPPEARED]
+                    pstart--;
+                    Serial.printf("pill summed f = %d\n", pstart);
+                    while (pstart >= 0 && (detline[pstart][1] == PILL_DISAPPEARED || detline[pstart][1] == PILL_EXPECTED)) {
+                        detline[pstart][1] = PILL_NO;
+                        pstart--;
+                    }
+                }
+            }
+        }
+    }
+
+    return pctr;
+}
+
 /* One Detection line method with 1 frame hysteresys */
 static uint16_t one_detection_line_hys1(dl_matrix3du_t *image_matrix, uint16_t *detline) {
     uint16_t si = 0;
@@ -242,6 +320,8 @@ static esp_err_t counter_stream_handler(httpd_req_t *req) {
 
     uint16_t detline[NUM_FRAMES] = {0,};
     memset(detline, PILL_NO, NUM_FRAMES);
+    // uint16_t detlines[NUM_FRAMES][2] = {0,};
+    // memset(detlines, PILL_NO, NUM_FRAMES*2);
 
     int face_id = 0;
     bool detected = false;
@@ -301,107 +381,8 @@ static esp_err_t counter_stream_handler(httpd_req_t *req) {
                     } else {
                         fr_ready = esp_timer_get_time();
 
+                        // pills_ctr += two_detection_lines(image_matrix, detlines);
                         pills_ctr += one_detection_line_hys1(image_matrix, detline);
-                        /* I can work on that image (every third pixel) */
-
-                        /* TODO: Test what is better: step every 3 pixels or make one channel matrix */
-                        /* Line is 240*3.  */
-                        // uint16_t si = 0;
-                        // uint32_t sid = 0;
-                        // grid image division method
-                        // for (uint16_t i = 0; i < image_matrix->h; i+=SUBFRAME_HIGHT) {
-                        //     for (uint16_t j = 0; j < image_matrix->w*3; j+=SUBFRAME_WIDTH*3) {
-                        //         for (uint16_t h = 0; h < SUBFRAME_HIGHT; h++) {
-                        //             for (uint16_t w = 0; w < SUBFRAME_WIDTH*3; w+=3) {
-                        //                 /*                                     intraframe                within frame     */
-                        //                 subframe[si++] = image_matrix->item[i*image_matrix->w*3+j + h*image_matrix->w*3+w];
-                        //                 sid += subframe[si-1];
-                        //             }
-                        //         }
-                        //         if (classifier.predict(subframe)) {
-                        //             pills_ctr++;
-                        //             Serial.printf("found pill sid = %d i = %d j = %d\n", sid, i, j);
-                        //         } else {
-                        //             // Serial.printf("no pill found i = %d j = %d\n", i, j);
-                        //         }
-                        //         si = sid = 0;
-                        //     }
-                        // }
-                        
-                        
-                        // uint16_t nframe = 0;
-                        // for (uint16_t i = 0; i < (image_matrix->w-SUBFRAME_WIDTH)*3; i+=SUBFRAME_STEP*3) {
-                        //     for (uint16_t h = 0; h < SUBFRAME_HIGHT; h++) {
-                        //         for (uint16_t w = 0; w < SUBFRAME_WIDTH*3; w+=3) {
-                        //             //                        intraframe         within frame     
-                        //             subframe[si++] = image_matrix->item[i + h*image_matrix->w*3+w];
-                        //         }
-                        //     }
-                        //     si = 0;
-
-                        //     nframe = i/(SUBFRAME_STEP*3);
-                        //     if (classifier.predict40(subframe)) {
-                        //         if (detline[nframe] == PILL_NO || detline[nframe] == PILL_DISAPPEARED) {
-                        //             detline[nframe] = PILL_DETECTED;
-                        //             Serial.printf("found pill f = %d\n", nframe);
-                        //         }
-                        //     } else {
-                        //         if (detline[nframe] == PILL_DETECTED) {
-                        //             detline[nframe] = PILL_DISAPPEARED;
-                        //             Serial.printf("disap pill f = %d\n", nframe);
-                        //         } else if (detline[nframe] == PILL_DISAPPEARED) {
-                        //             detline[nframe] = PILL_DISAPPEARED_HYS_1;
-                        //             // get the first PILL_NO
-                        //             int16_t pstart = nframe;
-                        //             while (pstart >= 0 && detline[pstart] != PILL_NO) pstart--;
-                        //             // pstart = -1 [++ -> 0] or 
-                        //             // detline[pstart] = PILL_NO [++ -> PILL_DISAPPEARED or PILL_DETECTED]
-                        //             pstart++;
-                        //             while (pstart < NUM_FRAMES && detline[pstart] == PILL_DISAPPEARED_HYS_1) pstart++;
-                                    
-                        //             // if all frames are PILL_DISAPPEARED then pstart is on PILL_NO or overflowed
-                        //             if (pstart == NUM_FRAMES || detline[pstart] == PILL_NO) {
-                        //                 pills_ctr++;
-                        //                 // pstart = NUM_FRAMES [-- -> NUM_FRAMES-1] or 
-                        //                 // detline[pstart] = PILL_NO [-- -> PILL_DISAPPEARED]
-                        //                 pstart--;
-                        //                 Serial.printf("pill summed f = %d\n", pstart);
-                        //                 while (pstart >= 0 && detline[pstart] == PILL_DISAPPEARED_HYS_1) {
-                        //                     detline[pstart] = PILL_NO;
-                        //                     pstart--;
-                        //                 }
-                        //             }
-
-                                    
-                                    // uint16_t fprev = PILL_NO;
-                                    // for (uint16_t i = pstart; i < NUM_FRAMES; i++) {
-                                    //     if (fprev == PILL_NO && detline[i] == PILL_DISAPPEARED) {
-                                    //         // pill starts
-                                    //         pstart = i;
-                                    //         fprev = PILL_DISAPPEARED;
-                                    //     }
-                                    //     if (fprev == PILL_DISAPPEARED && detline[i] == PILL_DETECTED) {
-                                    //         // pill not closed
-                                    //         pstart = 0;
-                                    //         fprev = PILL_NO;
-                                    //         Serial.printf("pill not closed f = %d\n", i-1);
-                                    //     }
-                                    //     // TODO: fix that case
-                                    //     if (fprev == PILL_DISAPPEARED && detline[i] == PILL_NO) {
-                                    //         // pill done
-                                    //         pills_ctr++;
-                                    //         for (uint16_t j = i-1; j >= pstart; j--) {
-                                    //             detline[j] = PILL_NO;
-                                    //         }
-                                    //         pstart = 0;
-                                    //         fprev = PILL_NO;
-                                    //         Serial.printf("pill summed f = %d\n", i-1);
-                                    //     }
-                                    // }
-                                    
-                        //         }
-                        //     }
-                        // }
 
                         fr_face = esp_timer_get_time();
                         fr_recognize = fr_face;
@@ -465,7 +446,6 @@ static esp_err_t counter_stream_handler(httpd_req_t *req) {
                 (detected)?"DETECTED ":"", face_id
                  );
         }
-        // pills_ctr = 0;
     }
 
     Serial.println("Stream ended");
