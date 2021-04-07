@@ -8,6 +8,24 @@
 
 #include "model.h"
 
+#define ALARM_LINK_MAX_SIZE     30
+
+// should match with the html 
+typedef enum {
+    CA_GRID_DIVISION = 0,
+    CA_ONE_LINE_DETECTION,
+    CA_ONE_LINE_DETECTION_HYS_1,
+    CA_TWO_LINES_DETECTION
+} counting_algorithm_t;
+
+typedef struct {
+    uint8_t counter_enable = 0;
+    counting_algorithm_t ca = CA_ONE_LINE_DETECTION_HYS_1;
+    uint8_t alarm_enable = 0;
+    uint64_t alarm_count = 0;
+    char alarm_link[ALARM_LINK_MAX_SIZE];
+} counter_status_t;
+
 typedef enum {
     PILL_NO = 0,
     PILL_DETECTED,
@@ -40,6 +58,7 @@ static const char* _STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" 
 static const char* _STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
 static const char* _STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n";
 
+counter_status_t cs;
 
 static ra_filter_t ra_filter;
 httpd_handle_t pills_httpd = NULL;
@@ -293,7 +312,8 @@ static uint16_t one_detection_line_hys1(dl_matrix3du_t *image_matrix, uint16_t *
 
 static esp_err_t index_handler(httpd_req_t *req) {
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    return httpd_resp_send(req, (const char *)index_html, index_html_len);
+    httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
+    return httpd_resp_send(req, (const char *)index_html_gz, index_html_gz_len);
 }
 
 static esp_err_t pills_handler(httpd_req_t *req) {
@@ -453,6 +473,82 @@ static esp_err_t counter_stream_handler(httpd_req_t *req) {
     return res;
 }
 
+static esp_err_t cmd_handler(httpd_req_t *req){
+    char*  buf;
+    size_t buf_len;
+    char variable[32] = {0,};
+    char value[32] = {0,};
+
+    buf_len = httpd_req_get_url_query_len(req) + 1;
+    if (buf_len > 1) {
+        buf = (char*)malloc(buf_len);
+        if(!buf){
+            httpd_resp_send_500(req);
+            return ESP_FAIL;
+        }
+        if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
+            if (httpd_query_key_value(buf, "var", variable, sizeof(variable)) == ESP_OK &&
+                httpd_query_key_value(buf, "val", value, sizeof(value)) == ESP_OK) {
+            } else {
+                free(buf);
+                httpd_resp_send_404(req);
+                return ESP_FAIL;
+            }
+        } else {
+            free(buf);
+            httpd_resp_send_404(req);
+            return ESP_FAIL;
+        }
+        free(buf);
+    } else {
+        httpd_resp_send_404(req);
+        return ESP_FAIL;
+    }
+
+    uint8_t res = 0;
+    Serial.printf("cmd_handler: '%s' -> '%s'\n", variable, value);
+
+    if(!strcmp(variable, "c")) cs.counter_enable = (uint8_t) atoi(value);
+    else if(!strcmp(variable, "ca")) cs.ca = (counting_algorithm_t) atoi(value);
+    else if(!strcmp(variable, "a")) cs.alarm_enable = (uint8_t) atoi(value);
+    else if(!strcmp(variable, "ac")) cs.alarm_count = (uint64_t) atoll(value);
+    else if(!strcmp(variable, "al")) strncpy(cs.alarm_link, value, ALARM_LINK_MAX_SIZE);
+    else if(!strcmp(variable, "rc")) pills_ctr = 0; // reset counter
+    else if(!strcmp(variable, "rd")) ESP.restart(); // reset board
+    else {
+        res = 1;
+    }
+
+    if (res){
+        return httpd_resp_send_500(req);
+    }
+
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    return httpd_resp_send(req, NULL, 0);
+}
+
+static esp_err_t status_handler(httpd_req_t *req){
+    static char json_response[1024];
+
+    sensor_t * s = esp_camera_sensor_get();
+    char * p = json_response;
+    *p++ = '{';
+
+    p+=sprintf(p, "\"c\":%u,", cs.counter_enable); // Counter Enable
+    p+=sprintf(p, "\"ca\":%u,", (uint8_t)cs.ca); // Counting Algorithm
+    p+=sprintf(p, "\"a\":%d,", cs.alarm_enable); // Alarm Enable
+    p+=sprintf(p, "\"ac\":%llu,", cs.alarm_count); // Alarm Count
+    p+=sprintf(p, "\"al\":\"%s\"", cs.alarm_link); // Alarm Link
+    *p++ = '}';
+    *p++ = 0;
+
+    Serial.printf("status_handler: %s\n", json_response);
+    
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    return httpd_resp_send(req, json_response, strlen(json_response));
+}
+
 void startCameraServer(){
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
 
@@ -460,6 +556,20 @@ void startCameraServer(){
         .uri       = "/",
         .method    = HTTP_GET,
         .handler   = index_handler,
+        .user_ctx  = NULL
+    };
+
+    httpd_uri_t status_uri = {
+        .uri       = "/status",
+        .method    = HTTP_GET,
+        .handler   = status_handler,
+        .user_ctx  = NULL
+    };
+
+    httpd_uri_t cmd_uri = {
+        .uri       = "/control",
+        .method    = HTTP_GET,
+        .handler   = cmd_handler,
         .user_ctx  = NULL
     };
 
@@ -485,6 +595,8 @@ void startCameraServer(){
     if (httpd_start(&pills_httpd, &config) == ESP_OK) {
         httpd_register_uri_handler(pills_httpd, &index_uri);
         httpd_register_uri_handler(pills_httpd, &pills_uri);
+        httpd_register_uri_handler(pills_httpd, &cmd_uri);
+        httpd_register_uri_handler(pills_httpd, &status_uri);
         
     }
 
