@@ -120,15 +120,12 @@ static uint16_t grid_division(dl_matrix3du_t *image_matrix) {
     return pctr;
 }
 
-static uint16_t one_detection_line(dl_matrix3du_t *image_matrix) {
+static uint16_t one_detection_line(dl_matrix3du_t *image_matrix, uint16_t *detline) {
     uint16_t si = 0;
     uint16_t pctr = 0;
     uint16_t nframe = 0;
 
     uint8_t subframe[SUBFRAME_SIZE] = {0,};
-    uint16_t detline[NUM_FRAMES] = {0,};
-
-    memset(detline, PILL_NO, NUM_FRAMES);
 
     for (uint16_t i = 0; i < (image_matrix->w-SUBFRAME_WIDTH)*3; i+=SUBFRAME_STEP*3) {
         for (uint16_t h = 0; h < SUBFRAME_HIGHT; h++) {
@@ -330,7 +327,7 @@ static esp_err_t pills_handler(httpd_req_t *req) {
 extern EventGroupHandle_t evGroup;
 
 /* Note, currently shares ra_filter with /stream endpoint */
-static esp_err_t counter_stream_handler(httpd_req_t *req) {
+static esp_err_t counter_handler(httpd_req_t *req) {
     camera_fb_t * fb = NULL;
     esp_err_t res = ESP_OK;
     size_t _jpg_buf_len = 0;
@@ -338,8 +335,8 @@ static esp_err_t counter_stream_handler(httpd_req_t *req) {
     char * part_buf[64];
     dl_matrix3du_t *image_matrix = NULL;
 
-    uint16_t detline[NUM_FRAMES] = {0,};
-    memset(detline, PILL_NO, NUM_FRAMES);
+    uint16_t detline[NUM_FRAMES][2] = {0,};
+    memset(detline, PILL_NO, NUM_FRAMES*2);
     // uint16_t detlines[NUM_FRAMES][2] = {0,};
     // memset(detlines, PILL_NO, NUM_FRAMES*2);
 
@@ -375,7 +372,7 @@ static esp_err_t counter_stream_handler(httpd_req_t *req) {
             fr_face = fr_start; 
             fr_encode = fr_start;
             fr_recognize = fr_start;
-            if (fb->width > 400) {
+            if (fb->width > 400 || !cs.counter_enable) {
                 if(fb->format != PIXFORMAT_JPEG){
                     bool jpeg_converted = frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len);
                     esp_camera_fb_return(fb);
@@ -401,9 +398,19 @@ static esp_err_t counter_stream_handler(httpd_req_t *req) {
                     } else {
                         fr_ready = esp_timer_get_time();
 
-                        // pills_ctr += two_detection_lines(image_matrix, detlines);
-                        pills_ctr += one_detection_line_hys1(image_matrix, detline);
-
+                        if (cs.ca == CA_ONE_LINE_DETECTION_HYS_1) {
+                            pills_ctr += one_detection_line_hys1(image_matrix, *detline);
+                        } else if (cs.ca == CA_GRID_DIVISION) {
+                            pills_ctr = grid_division(image_matrix);
+                        } else if (cs.ca == CA_ONE_LINE_DETECTION) {
+                            pills_ctr += one_detection_line(image_matrix, *detline);
+                        } else if (cs.ca == CA_TWO_LINES_DETECTION) {
+                            pills_ctr += two_detection_lines(image_matrix, detline);
+                        } else {
+                            // one that works best
+                            pills_ctr += one_detection_line_hys1(image_matrix, *detline);
+                        }
+                        
                         fr_face = esp_timer_get_time();
                         fr_recognize = fr_face;
                         if (1) {
@@ -583,7 +590,7 @@ void startCameraServer(){
     httpd_uri_t counter_stream_uri = {
         .uri       = "/counter",
         .method    = HTTP_GET,
-        .handler   = counter_stream_handler,
+        .handler   = counter_handler,
         .user_ctx  = NULL
     };
 
