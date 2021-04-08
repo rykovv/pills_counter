@@ -6,11 +6,8 @@
 #include "esp_wifi.h"
 #include "OneButton.h"
 
-// #include "model_random_forest.h"
-// #include "samples.h"
-
 //#define ENABLE_SSD1306
-
+//#define ENABLE_BUTTON
 #define BAUDRATE          115200
 
 /* BOARD PINS */
@@ -48,14 +45,16 @@ OLEDDisplayUi ui(&oled);
 /* PIR Sensor pin */
 #define AS312_PIN 33
 /* Board button */
+#ifdef ENABLE_BUTTON
 #define BUTTON_1 34
+OneButton button1(BUTTON_1, true);
+#endif
 String ip;
 EventGroupHandle_t evGroup;
 
-OneButton button1(BUTTON_1, true);
-
 void startCameraServer();
 
+#ifdef ENABLE_BUTTON
 /* Some functionality associated with the button1 */
 void button1Func()
 {
@@ -67,6 +66,7 @@ void button1Func()
     delay(200);
     xEventGroupSetBits(evGroup, 1);
 }
+#endif
 
 /* Refresh OLED */
 #ifdef ENABLE_SSD1306
@@ -111,12 +111,8 @@ FrameCallback frames[] = {drawFrame1, drawFrame2};
 #define FRAMES_SIZE (sizeof(frames) / sizeof(frames[0]))
 #endif
 
-// Eloquent::ML::Port::RandomForest classifier;
-// void test_classifier();
-
 ////////////////////////////////////////////////////////////////////////////////////////
-void setup()
-{
+void setup() {
     Serial.begin(BAUDRATE);
     Serial.setDebugOutput(true);
     Serial.println();
@@ -210,7 +206,9 @@ void setup()
     */
 
     /* Attach button1 functionality */
+    #ifdef ENABLE_BUTTON
     button1.attachClick(button1Func);
+    #endif
 
     /* Setup AP */
     uint8_t mac[6];
@@ -258,59 +256,14 @@ void setup()
     Serial.println("' to connect");
 }
 
-void loop()
-{
+void loop() {
 #ifdef ENABLE_SSD1306
     if (ui.update()) {
 #endif
+#ifdef ENABLE_BUTTON
         button1.tick();
+#endif
 #ifdef ENABLE_SSD1306
     }
 #endif
 }
-
-// void test_classifier() {
-//     uint32_t mills = millis();
-//     uint32_t elapsed = 0;
-//     while (1) {
-//         Serial.print("Predicted class: (pill)");
-//         mills = millis();
-//         Serial.println(classifier.predictLabel(sample1));
-//         elapsed = millis() - mills;
-//         Serial.printf("elapsed: %d ms\n", elapsed);
-        
-
-//         Serial.print("Predicted class: (pill)");
-//         mills = millis();
-//         Serial.println(classifier.predictLabel(sample2));
-//         elapsed = millis() - mills;
-//         Serial.printf("elapsed: %d ms\n", elapsed);
-
-
-//         Serial.print("Predicted class: (pill)");
-//         mills = millis();
-//         Serial.println(classifier.predictLabel(sample3));
-//         elapsed = millis() - mills;
-//         Serial.printf("elapsed: %d ms\n", elapsed);
-
-
-//         Serial.print("Predicted class: (none)");
-//         mills = millis();
-//         Serial.println(classifier.predictLabel(sample4));
-//         elapsed = millis() - mills;
-//         Serial.printf("elapsed: %d ms\n", elapsed);
-
-
-//         Serial.print("Predicted class: (none)");
-//         mills = millis();
-//         Serial.println(classifier.predictLabel(sample5));
-//         elapsed = millis() - mills;
-//         Serial.printf("elapsed: %d ms\n", elapsed);
-
-//         Serial.print("Predicted class: (none)");
-//         mills = millis();
-//         Serial.println(classifier.predictLabel(sample6));
-//         elapsed = millis() - mills;
-//         Serial.printf("elapsed: %d ms\n", elapsed); 
-//     }
-// }

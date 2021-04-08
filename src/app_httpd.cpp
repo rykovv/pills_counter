@@ -537,7 +537,6 @@ static esp_err_t cmd_handler(httpd_req_t *req){
 static esp_err_t status_handler(httpd_req_t *req){
     static char json_response[1024];
 
-    sensor_t * s = esp_camera_sensor_get();
     char * p = json_response;
     *p++ = '{';
 
