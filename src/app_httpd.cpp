@@ -7,24 +7,7 @@
 #include "pills_index.h"
 
 #include "model.h"
-
-#define ALARM_LINK_MAX_SIZE     30
-
-// should match with the html 
-typedef enum {
-    CA_GRID_DIVISION = 0,
-    CA_ONE_LINE_DETECTION,
-    CA_ONE_LINE_DETECTION_HYS_1,
-    CA_TWO_LINES_DETECTION
-} counting_algorithm_t;
-
-typedef struct {
-    uint8_t counter_enable = 0;
-    counting_algorithm_t ca = CA_ONE_LINE_DETECTION_HYS_1;
-    uint8_t alarm_enable = 0;
-    uint64_t alarm_count = 0;
-    char alarm_link[ALARM_LINK_MAX_SIZE];
-} counter_status_t;
+#include "counter.h"
 
 typedef enum {
     PILL_NO = 0,
@@ -58,14 +41,13 @@ static const char* _STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" 
 static const char* _STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
 static const char* _STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n";
 
-counter_status_t cs;
+extern counter_status_t cs;
 
 static ra_filter_t ra_filter;
 httpd_handle_t pills_httpd = NULL;
 httpd_handle_t camera_httpd = NULL;
 
 Eloquent::ML::Port::RandomForest classifier;
-static volatile uint64_t pills_ctr = 0;
 
 static ra_filter_t * ra_filter_init(ra_filter_t * filter, size_t sample_size){
     memset(filter, 0, sizeof(ra_filter_t));
@@ -317,7 +299,7 @@ static esp_err_t pills_handler(httpd_req_t *req) {
     esp_err_t res = ESP_OK;
     char *ctr_str = (char *)malloc(sizeof(char)*10);
 
-    sprintf(ctr_str, "%llu", pills_ctr);
+    sprintf(ctr_str, "%llu", cs.pills_ctr);
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     res = httpd_resp_send(req, (const char *)ctr_str, strlen(ctr_str));
     
@@ -399,16 +381,16 @@ static esp_err_t counter_handler(httpd_req_t *req) {
                         fr_ready = esp_timer_get_time();
 
                         if (cs.ca == CA_ONE_LINE_DETECTION_HYS_1) {
-                            pills_ctr += one_detection_line_hys1(image_matrix, *detline);
+                            cs.pills_ctr += one_detection_line_hys1(image_matrix, *detline);
                         } else if (cs.ca == CA_GRID_DIVISION) {
-                            pills_ctr = grid_division(image_matrix);
+                            cs.pills_ctr = grid_division(image_matrix);
                         } else if (cs.ca == CA_ONE_LINE_DETECTION) {
-                            pills_ctr += one_detection_line(image_matrix, *detline);
+                            cs.pills_ctr += one_detection_line(image_matrix, *detline);
                         } else if (cs.ca == CA_TWO_LINES_DETECTION) {
-                            pills_ctr += two_detection_lines(image_matrix, detline);
+                            cs.pills_ctr += two_detection_lines(image_matrix, detline);
                         } else {
                             // one that works best
-                            pills_ctr += one_detection_line_hys1(image_matrix, *detline);
+                            cs.pills_ctr += one_detection_line_hys1(image_matrix, *detline);
                         }
                         
                         fr_face = esp_timer_get_time();
@@ -520,7 +502,7 @@ static esp_err_t cmd_handler(httpd_req_t *req){
     else if(!strcmp(variable, "a")) cs.alarm_enable = (uint8_t) atoi(value);
     else if(!strcmp(variable, "ac")) cs.alarm_count = (uint64_t) atoll(value);
     else if(!strcmp(variable, "al")) strncpy(cs.alarm_link, value, ALARM_LINK_MAX_SIZE);
-    else if(!strcmp(variable, "rc")) pills_ctr = 0; // reset counter
+    else if(!strcmp(variable, "rc")) cs.pills_ctr = 0; // reset counter
     else if(!strcmp(variable, "rd")) ESP.restart(); // reset board
     else {
         res = 1;
@@ -593,8 +575,6 @@ void startCameraServer(){
         .user_ctx  = NULL
     };
 
-
-
     ra_filter_init(&ra_filter, 20);
 
     Serial.printf("Starting web server on port: '%d'", config.server_port);
@@ -603,7 +583,6 @@ void startCameraServer(){
         httpd_register_uri_handler(pills_httpd, &pills_uri);
         httpd_register_uri_handler(pills_httpd, &cmd_uri);
         httpd_register_uri_handler(pills_httpd, &status_uri);
-        
     }
 
     config.server_port++;

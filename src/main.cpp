@@ -5,9 +5,12 @@
 #include "esp_camera.h"
 #include "esp_wifi.h"
 #include "OneButton.h"
+#include "counter.h"
 
 //#define ENABLE_SSD1306
-//#define ENABLE_BUTTON
+#define ENABLE_BUTTON
+#define ENABLE_ALARM
+// #define SOFTAP_MODE       //The comment will be connected to the specified ssid
 #define BAUDRATE          115200
 
 /* BOARD PINS */
@@ -32,6 +35,11 @@
 #define I2C_SDA           21
 #define I2C_SCL           22
 
+#ifndef SOFTAP_MODE
+#define WIFI_SSID   "SpectrumSetup-28"
+#define WIFI_PASSWD "heartylion234"
+#endif
+
 /* Enabling OLED */
 #ifdef ENABLE_SSD1306
 #include "SSD1306.h"
@@ -51,6 +59,16 @@ OneButton button1(BUTTON_1, true);
 #endif
 String ip;
 EventGroupHandle_t evGroup;
+
+counter_status_t cs;
+#ifdef ENABLE_ALARM
+#include "esp_http_client.h"
+hw_timer_t *timer = NULL;
+volatile uint8_t sample_flag = 0;
+
+void IRAM_ATTR onTimer();
+esp_err_t _http_event_handle(esp_http_client_event_t *evt);
+#endif
 
 void startCameraServer();
 
@@ -210,6 +228,7 @@ void setup() {
     button1.attachClick(button1Func);
     #endif
 
+    #ifdef SOFTAP_MODE
     /* Setup AP */
     uint8_t mac[6];
     char buff[128];
@@ -223,6 +242,15 @@ void setup() {
         Serial.println("AP Begin Failed.");
         while (1);
     }
+    #else
+    WiFi.begin(WIFI_SSID, WIFI_PASSWD);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println("");
+    Serial.println("WiFi connected");
+    #endif
 
 #ifdef ENABLE_SSD1306
     oled.clear();
@@ -248,12 +276,23 @@ void setup() {
 #endif
 
 
+#ifdef SOFTAP_MODE
     ip = WiFi.softAPIP().toString();
-    Serial.printf("\nAP Started .. Please Connect %s hotspot\n", buff);
+    Serial.printf("\nAp Started .. Please Connect %s hotspot\n", buff);
+#else
+    ip = WiFi.localIP().toString();
+#endif
 
     Serial.print("Camera Ready! Use 'http://");
     Serial.print(ip);
     Serial.println("' to connect");
+
+#ifdef ENABLE_ALARM
+    timer = timerBegin(0, 80, true);
+    timerAttachInterrupt(timer, &onTimer, true);
+    timerAlarmWrite(timer, 1000, true); // every second
+    timerAlarmEnable(timer);
+#endif
 }
 
 void loop() {
@@ -266,4 +305,73 @@ void loop() {
 #ifdef ENABLE_SSD1306
     }
 #endif
+#ifdef ENABLE_ALARM
+    if (sample_flag) {
+        if (cs.alarm_enable && cs.pills_ctr >= cs.alarm_count) {
+            esp_http_client_config_t config;
+            config.url = cs.alarm_link;
+            config.event_handler = _http_event_handle;
+
+            char alarm_json[128];
+            uint8_t mac[6];
+            esp_wifi_get_mac(WIFI_IF_AP, mac);            
+            snprintf(alarm_json, 100, "{\"id\":\"PILLS-COUNTER-%02X:%02X\",\"counter\":%llu, \"alarm\":1}",mac[4],mac[5],cs.pills_ctr);
+            
+            esp_http_client_handle_t client = esp_http_client_init(&config);
+            esp_http_client_set_method(client, HTTP_METHOD_POST);
+            esp_http_client_set_post_field(client, alarm_json, strlen(alarm_json));
+            esp_http_client_set_header(client, "Content-Type", "application/json");
+
+            esp_err_t err = esp_http_client_perform(client);
+
+            if (err == ESP_OK) {
+            ESP_LOGI(TAG, "Status = %d, content_length = %d",
+                    esp_http_client_get_status_code(client),
+                    esp_http_client_get_content_length(client));
+            }
+            esp_http_client_cleanup(client);
+            cs.alarm_enable = 0;
+            cs.alarm_count = 0;
+        }
+        sample_flag = 0;
+    }
+#endif
 }
+
+#ifdef ENABLE_ALARM
+void IRAM_ATTR onTimer() {
+    sample_flag = 1;
+}
+
+esp_err_t _http_event_handle(esp_http_client_event_t *evt)
+{
+    switch(evt->event_id) {
+        case HTTP_EVENT_ERROR:
+            ESP_LOGI(TAG, "HTTP_EVENT_ERROR");
+            break;
+        case HTTP_EVENT_ON_CONNECTED:
+            ESP_LOGI(TAG, "HTTP_EVENT_ON_CONNECTED");
+            break;
+        case HTTP_EVENT_HEADER_SENT:
+            ESP_LOGI(TAG, "HTTP_EVENT_HEADER_SENT");
+            break;
+        case HTTP_EVENT_ON_HEADER:
+            ESP_LOGI(TAG, "HTTP_EVENT_ON_HEADER");
+            printf("%.*s", evt->data_len, (char*)evt->data);
+            break;
+        case HTTP_EVENT_ON_DATA:
+            ESP_LOGI(TAG, "HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
+            if (!esp_http_client_is_chunked_response(evt->client)) {
+                printf("%.*s", evt->data_len, (char*)evt->data);
+            }
+            break;
+        case HTTP_EVENT_ON_FINISH:
+            ESP_LOGI(TAG, "HTTP_EVENT_ON_FINISH");
+            break;
+        case HTTP_EVENT_DISCONNECTED:
+            ESP_LOGI(TAG, "HTTP_EVENT_DISCONNECTED");
+            break;
+    }
+    return ESP_OK;
+}
+#endif
