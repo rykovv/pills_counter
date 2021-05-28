@@ -1,3 +1,6 @@
+#ifndef COUNTER_H
+#define COUNTER_H
+
 #include "Arduino.h"
 
 #define ALARM_LINK_MAX_SIZE     30
@@ -18,3 +21,8 @@ typedef struct {
     char alarm_link[ALARM_LINK_MAX_SIZE];
     uint64_t pills_ctr = 0;
 } counter_status_t;
+
+void counter_init (void);
+void counter_count ();
+
+#endif // COUNTER_H

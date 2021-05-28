@@ -5,7 +5,12 @@
 #include "esp_camera.h"
 #include "esp_wifi.h"
 #include "OneButton.h"
+
+#include "httpd_server/httpd_server.h"
 #include "counter.h"
+
+#include "dl_lib_matrix3d.h"
+#include "ml_counter/ml_counter.h"
 
 //#define ENABLE_SSD1306
 #define ENABLE_BUTTON
@@ -36,8 +41,8 @@
 #define I2C_SCL           22
 
 #ifndef SOFTAP_MODE
-#define WIFI_SSID   "SpectrumSetup-28"
-#define WIFI_PASSWD "heartylion234"
+#define WIFI_SSID         "SpectrumSetup-28"
+#define WIFI_PASSWD       "heartylion234"
 #endif
 
 /* Enabling OLED */
@@ -57,10 +62,7 @@ OLEDDisplayUi ui(&oled);
 #define BUTTON_1 34
 OneButton button1(BUTTON_1, true);
 #endif
-String ip;
-EventGroupHandle_t evGroup;
 
-counter_status_t cs;
 #ifdef ENABLE_ALARM
 #include "esp_http_client.h"
 hw_timer_t *timer = NULL;
@@ -70,7 +72,14 @@ void IRAM_ATTR onTimer();
 esp_err_t _http_event_handle(esp_http_client_event_t *evt);
 #endif
 
-void startCameraServer();
+String ip;
+EventGroupHandle_t evGroup;
+
+counter_status_t cs;
+volatile uint8_t *fb_free;
+
+// void device_update_task (void *parameter);
+void counting_task (void *parameter);
 
 #ifdef ENABLE_BUTTON
 /* Some functionality associated with the button1 */
@@ -135,16 +144,16 @@ void setup() {
     Serial.setDebugOutput(true);
     Serial.println();
 
-    pinMode(AS312_PIN, INPUT);
-
-    // config OLED
 #ifdef ENABLE_SSD1306
+    // config OLED
     oled.init();
     oled.setFont(ArialMT_Plain_16);
     oled.setTextAlignment(TEXT_ALIGN_CENTER);
     delay(50);
     oled.drawString(oled.getWidth() / 2, oled.getHeight() / 2, "TTGO Camera");
     oled.display();
+
+    pinMode(AS312_PIN, INPUT);
 #endif
     
     /* Create Event Group */
@@ -260,7 +269,7 @@ void setup() {
 
     /* Start camera server */
     delay(1000);
-    startCameraServer();
+    httpd_server_init(&cs, fb_free);
 
     delay(50);
 
@@ -290,13 +299,29 @@ void setup() {
 #ifdef ENABLE_ALARM
     timer = timerBegin(0, 80, true);
     timerAttachInterrupt(timer, &onTimer, true);
-    timerAlarmWrite(timer, 1000, true); // every second
+    timerAlarmWrite(timer, 1000000, true); // check counter every second
     timerAlarmEnable(timer);
 #endif
+
+    *fb_free = 0;
+    // xTaskCreate(device_update_task,     /* Task function. */
+    //             "device_update_task",   /* String with name of task. */
+    //             1024,                   /* Stack size in bytes. */
+    //             NULL,                   /* Parameter passed as input of the task */
+    //             1,                      /* Priority of the task. */
+    //             NULL);                  /* Task handle. */
+
+    xTaskCreate(counting_task,          /* Task function. */
+                "counting_task",        /* String with name of task. */
+                5120,                   /* Stack size in bytes. */
+                NULL,                   /* Parameter passed as input of the task */
+                1,                      /* Priority of the task. */
+                NULL);                  /* Task handle. */
 }
 
-void loop() {
-#ifdef ENABLE_SSD1306
+void loop () {
+// void device_update_task (void *parameter) {
+    #ifdef ENABLE_SSD1306
     if (ui.update()) {
 #endif
 #ifdef ENABLE_BUTTON
@@ -332,8 +357,99 @@ void loop() {
             free(alarm_json);
         }
         sample_flag = 0;
+        Serial.printf("counter value = %lu\n", cs.pills_ctr);
     }
 #endif
+}
+
+void counting_task (void *parameter) {
+    camera_fb_t * fb = NULL;
+    esp_err_t res = ESP_OK;
+    size_t _jpg_buf_len = 0;
+    uint8_t * _jpg_buf = NULL;
+    char * part_buf[64];
+    dl_matrix3du_t *image_matrix = NULL;
+
+    int64_t fr_start = 0;
+    int64_t fr_face = 0;
+    int64_t fr_recognize = 0;
+    int64_t fr_encode = 0;
+    int64_t fr_ready = 0;
+
+    uint16_t detline[NUM_FRAMES][2];
+
+    ml_counter_init(detline);
+    set_ml_model(classify_rf_d40);
+
+    static int64_t last_frame = 0;
+    if(!last_frame) {
+        last_frame = esp_timer_get_time();
+    }
+
+    for (;;) {
+        // wait for fb to be taken
+        while (!(*fb_free));
+        *fb_free = 0;
+        fb = esp_camera_fb_get();
+        if (!fb) {
+            ESP_LOGE(TAG, "Camera capture failed");
+            res = ESP_FAIL;
+        } else {
+            fr_start = esp_timer_get_time();
+            fr_ready = fr_start;
+            fr_face = fr_start; 
+            fr_encode = fr_start;
+            fr_recognize = fr_start;
+
+            if (fb->width <= 400 && cs.counter_enable) {
+                image_matrix = dl_matrix3du_alloc(1, fb->width, fb->height, 3);
+
+                if (!image_matrix) {
+                    ESP_LOGE(TAG, "dl_matrix3du_alloc failed");
+                    res = ESP_FAIL;
+                } else {
+                    if(!fmt2rgb888(fb->buf, fb->len, fb->format, image_matrix->item)){
+                        ESP_LOGE(TAG, "fmt2rgb888 failed");
+                        res = ESP_FAIL;
+                    } else {
+                        // release fb
+                        esp_camera_fb_return(fb);
+                        *fb_free = 1;
+                        fb = NULL;
+                        fr_ready = esp_timer_get_time();
+
+                        if (cs.ca == CA_ONE_LINE_DETECTION_HYS_1) {
+                            cs.pills_ctr += one_detection_line_hys1(image_matrix, *detline);
+                        } else if (cs.ca == CA_GRID_DIVISION) {
+                            cs.pills_ctr = grid_division(image_matrix);
+                        } else if (cs.ca == CA_ONE_LINE_DETECTION) {
+                            cs.pills_ctr += one_detection_line(image_matrix, *detline);
+                        } else if (cs.ca == CA_TWO_LINES_DETECTION) {
+                            cs.pills_ctr += two_detection_lines(image_matrix, detline);
+                        } else {
+                            // one that works best
+                            cs.pills_ctr += one_detection_line_hys1(image_matrix, *detline);
+                        }
+                        
+                        fr_face = esp_timer_get_time();
+                        fr_recognize = fr_face;
+
+                        // if(!fmt2jpg(image_matrix->item, image_matrix->w*image_matrix->h*3, image_matrix->w, image_matrix->h, PIXFORMAT_RGB888, 90, &_jpg_buf, &_jpg_buf_len)){
+                        //     ESP_LOGE(TAG, "fmt2jpg failed");
+                        //     res = ESP_FAIL;
+                        // }
+
+                        fr_encode = esp_timer_get_time();
+                    }
+                    dl_matrix3du_free(image_matrix);
+                }
+            } else {
+                esp_camera_fb_return(fb);
+                *fb_free = 1;
+                fb = NULL;
+            }
+        }
+    }
 }
 
 #ifdef ENABLE_ALARM

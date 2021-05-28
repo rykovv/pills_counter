@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "counter.h": "c",
+        "arduino.h": "c"
+    }
+}
