@@ -92,7 +92,6 @@ static esp_err_t counter_handler(httpd_req_t *req) {
     size_t _jpg_buf_len = 0;
     uint8_t * _jpg_buf = NULL;
     char * part_buf[64];
-    dl_matrix3du_t *image_matrix = NULL;
 
     int64_t fr_start = 0;
     int64_t fr_face = 0;
@@ -120,8 +119,8 @@ static esp_err_t counter_handler(httpd_req_t *req) {
 
     for (;;) {
         // wait for fb to be taken
-        while (!(*_fb_free));
-        *_fb_free = 0;
+        // while (!(*_fb_free));
+        // *_fb_free = 0;
         fb = esp_camera_fb_get();
         if (!fb) {
             ESP_LOGD(TAG, "Camera capture failed");
@@ -132,20 +131,23 @@ static esp_err_t counter_handler(httpd_req_t *req) {
             fr_face = fr_start; 
             fr_encode = fr_start;
             fr_recognize = fr_start;
-            if(fb->format != PIXFORMAT_JPEG){
+
+            if (fb->format != PIXFORMAT_JPEG) {
                 bool jpeg_converted = frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len);
-                esp_camera_fb_return(fb);
-                *_fb_free = 0;
-                fb = NULL;
                 if(!jpeg_converted){
                     ESP_LOGD(TAG, "JPEG compression failed");
                     res = ESP_FAIL;
                 }
             } else {
                 // copy jpg and release fb
+                _jpg_buf = (uint8_t *) malloc(sizeof(uint8_t)*(fb->height*fb->width*3));
+                memcpy(_jpg_buf, fb->buf, fb->height*fb->width*3);
                 _jpg_buf_len = fb->len;
-                _jpg_buf = fb->buf;
+                // _jpg_buf = fb->buf;
             }
+            esp_camera_fb_return(fb);
+            // *_fb_free = 0;
+            fb = NULL;
         }
         if(res == ESP_OK){
             res = httpd_resp_send_chunk(req, _STREAM_BOUNDARY, strlen(_STREAM_BOUNDARY));
@@ -160,7 +162,7 @@ static esp_err_t counter_handler(httpd_req_t *req) {
 
         if(fb){
             esp_camera_fb_return(fb);
-            *_fb_free = 0;
+            // *_fb_free = 0;
             fb = NULL;
             _jpg_buf = NULL;
         } else if(_jpg_buf) {

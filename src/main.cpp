@@ -388,8 +388,8 @@ void counting_task (void *parameter) {
 
     for (;;) {
         // wait for fb to be taken
-        while (!(*fb_free));
-        *fb_free = 0;
+        // while (!(*fb_free));
+        // *fb_free = 0;
         fb = esp_camera_fb_get();
         if (!fb) {
             ESP_LOGE(TAG, "Camera capture failed");
@@ -414,7 +414,7 @@ void counting_task (void *parameter) {
                     } else {
                         // release fb
                         esp_camera_fb_return(fb);
-                        *fb_free = 1;
+                        // *fb_free = 1;
                         fb = NULL;
                         fr_ready = esp_timer_get_time();
 
@@ -439,13 +439,13 @@ void counting_task (void *parameter) {
                         //     res = ESP_FAIL;
                         // }
 
-                        fr_encode = esp_timer_get_time();
+                        // fr_encode = esp_timer_get_time();
                     }
                     dl_matrix3du_free(image_matrix);
                 }
             } else {
                 esp_camera_fb_return(fb);
-                *fb_free = 1;
+                // *fb_free = 1;
                 fb = NULL;
             }
         }
