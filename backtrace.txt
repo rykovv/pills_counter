@@ -1,1 +1,6 @@
-0x40092542:0x3ffdc2c0 0x40092448:0x3ffdc2d0
+***ERROR*** A stack overflow in task httpd has been detected.<\r><\n>
+abort() was called at PC 0x4008e7a0 on core 1<\r><\n>
+<\r><\n>
+ELF file SHA256: 0000000000000000<\r><\n>
+<\r><\n>
+Backtrace: 0x4008e510:0x3ffdb480 0x4008e789:0x3ffdb4a0 0x4008e7a0:0x3ffdb4c0 0x40090fda:0x3ffdb4e0 0x40092ba4:0x3ffdb500 0x40092b5a:0x00000000

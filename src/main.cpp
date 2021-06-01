@@ -7,11 +7,13 @@
 #include "OneButton.h"
 
 #include "httpd_server/httpd_server.h"
-#include "counter.h"
+#include "device/device.h"
 
 #include "dl_lib_matrix3d.h"
 #include "ml_counter/ml_counter.h"
 
+#ifdef CORE_DEBUG_LEVEL
+#endif
 //#define ENABLE_SSD1306
 #define ENABLE_BUTTON
 #define ENABLE_ALARM
@@ -75,8 +77,7 @@ esp_err_t _http_event_handle(esp_http_client_event_t *evt);
 String ip;
 EventGroupHandle_t evGroup;
 
-counter_status_t cs;
-volatile uint8_t *fb_free;
+device_t device;
 
 // void device_update_task (void *parameter);
 void counting_task (void *parameter);
@@ -158,7 +159,7 @@ void setup() {
     
     /* Create Event Group */
     if (!(evGroup = xEventGroupCreate())) {
-        Serial.println("evGroup Fail");
+        ESP_LOGE(TAG, "evGroup Fail");
         while (1);
     }
     xEventGroupSetBits(evGroup, 1);
@@ -193,7 +194,7 @@ void setup() {
     // camera init
     esp_err_t err = esp_camera_init(&config);
     if (err != ESP_OK) {
-        Serial.printf("Camera init Fail");
+        ESP_LOGD(TAG, "Camera init Fail");
 #ifdef ENABLE_SSD1306
         oled.clear();
         oled.drawString(oled.getWidth() / 2, oled.getHeight() / 2, "Camera init Fail");
@@ -246,9 +247,9 @@ void setup() {
     WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
     esp_wifi_get_mac(WIFI_IF_AP, mac);
     sprintf(buff, "PILLS-COUNTER-%02X:%02X", mac[4], mac[5]);
-    Serial.printf("Device AP Name:%s\n", buff);
+    ESP_LOGI(TAG, "Device AP Name:%s\n", buff);
     if (!WiFi.softAP(buff, NULL, 1, 0)) {
-        Serial.println("AP Begin Failed.");
+        ESP_LOGE(TAG, "AP Begin Failed.");
         while (1);
     }
     #else
@@ -267,9 +268,12 @@ void setup() {
     oled.display();
 #endif
 
-    /* Start camera server */
-    delay(1000);
-    httpd_server_init(&cs, fb_free);
+    moving_avg_init(&device.stats.ma, MOVING_AVG_SAMPLES);
+    ml_counter_init(device.shared.detline);
+    /* Setting Random Forest ML classification model */
+    set_ml_model(classify_rf_d40);
+    /* Start httpd monitor server */
+    httpd_server_init(&device);
 
     delay(50);
 
@@ -292,7 +296,7 @@ void setup() {
     ip = WiFi.localIP().toString();
 #endif
 
-    Serial.print("Camera Ready! Use 'http://");
+    Serial.print("Pills Counter Ready! Use 'http://");
     Serial.print(ip);
     Serial.println("' to connect");
 
@@ -303,17 +307,9 @@ void setup() {
     timerAlarmEnable(timer);
 #endif
 
-    *fb_free = 0;
-    // xTaskCreate(device_update_task,     /* Task function. */
-    //             "device_update_task",   /* String with name of task. */
-    //             1024,                   /* Stack size in bytes. */
-    //             NULL,                   /* Parameter passed as input of the task */
-    //             1,                      /* Priority of the task. */
-    //             NULL);                  /* Task handle. */
-
     xTaskCreate(counting_task,          /* Task function. */
                 "counting_task",        /* String with name of task. */
-                5120,                   /* Stack size in bytes. */
+                10000,//5120,                   /* Stack size in bytes. */
                 NULL,                   /* Parameter passed as input of the task */
                 1,                      /* Priority of the task. */
                 NULL);                  /* Task handle. */
@@ -332,14 +328,16 @@ void loop () {
 #endif
 #ifdef ENABLE_ALARM
     if (sample_flag) {
-        if (cs.alarm_enable && cs.pills_ctr >= cs.alarm_count) {
-            // url correct form -> http://<ip>:<port>/<path>/
-            esp_http_client_config_t config = {.url = cs.alarm_link};
+        if (device.status.alarm_enable && device.status.counter_value >= device.status.alarm_count
+                                        && strlen(device.status.alarm_link) > 10) 
+        {
+            // url correct form -> "http://<ip>:<port>/<path>/"
+            esp_http_client_config_t config = {.url = device.status.alarm_link};
 
             char *alarm_json = (char *)malloc(sizeof(char)*128);
             uint8_t mac[6];
             esp_wifi_get_mac(WIFI_IF_AP, mac);            
-            snprintf(alarm_json, 128, "{\"id\":\"PILLS-COUNTER-%02X:%02X\",\"counter\":%llu, \"alarm\":1}",mac[4],mac[5],cs.pills_ctr);
+            snprintf(alarm_json, 128, "{\"id\":\"PILLS-COUNTER-%02X:%02X\",\"counter\":%llu, \"alarm\":1}",mac[4],mac[5], device.status.counter_value);
             esp_http_client_handle_t client = esp_http_client_init(&config);
             esp_http_client_set_method(client, HTTP_METHOD_POST);
             esp_http_client_set_post_field(client, alarm_json, strlen(alarm_json));
@@ -353,100 +351,81 @@ void loop () {
                     esp_http_client_get_content_length(client));
             }
             esp_http_client_cleanup(client);
-            cs.alarm_enable = 0;
+            device.status.alarm_enable = 0;
             free(alarm_json);
         }
         sample_flag = 0;
-        Serial.printf("counter value = %lu\n", cs.pills_ctr);
     }
 #endif
 }
 
 void counting_task (void *parameter) {
-    camera_fb_t * fb = NULL;
-    esp_err_t res = ESP_OK;
-    size_t _jpg_buf_len = 0;
-    uint8_t * _jpg_buf = NULL;
-    char * part_buf[64];
-    dl_matrix3du_t *image_matrix = NULL;
+    size_t fb_len = 0;
 
-    int64_t fr_start = 0;
-    int64_t fr_face = 0;
-    int64_t fr_recognize = 0;
-    int64_t fr_encode = 0;
-    int64_t fr_ready = 0;
-
-    uint16_t detline[NUM_FRAMES][2];
-
-    ml_counter_init(detline);
-    set_ml_model(classify_rf_d40);
-
-    static int64_t last_frame = 0;
-    if(!last_frame) {
-        last_frame = esp_timer_get_time();
+    if(!device.stats.last_frame) {
+        device.stats.last_frame = esp_timer_get_time();
     }
 
     for (;;) {
-        // wait for fb to be taken
-        // while (!(*fb_free));
-        // *fb_free = 0;
-        fb = esp_camera_fb_get();
-        if (!fb) {
-            ESP_LOGE(TAG, "Camera capture failed");
-            res = ESP_FAIL;
-        } else {
-            fr_start = esp_timer_get_time();
-            fr_ready = fr_start;
-            fr_face = fr_start; 
-            fr_encode = fr_start;
-            fr_recognize = fr_start;
-
-            if (fb->width <= 400 && cs.counter_enable) {
-                image_matrix = dl_matrix3du_alloc(1, fb->width, fb->height, 3);
-
-                if (!image_matrix) {
-                    ESP_LOGE(TAG, "dl_matrix3du_alloc failed");
-                    res = ESP_FAIL;
-                } else {
-                    if(!fmt2rgb888(fb->buf, fb->len, fb->format, image_matrix->item)){
-                        ESP_LOGE(TAG, "fmt2rgb888 failed");
-                        res = ESP_FAIL;
-                    } else {
-                        // release fb
-                        esp_camera_fb_return(fb);
-                        // *fb_free = 1;
-                        fb = NULL;
-                        fr_ready = esp_timer_get_time();
-
-                        if (cs.ca == CA_ONE_LINE_DETECTION_HYS_1) {
-                            cs.pills_ctr += one_detection_line_hys1(image_matrix, *detline);
-                        } else if (cs.ca == CA_GRID_DIVISION) {
-                            cs.pills_ctr = grid_division(image_matrix);
-                        } else if (cs.ca == CA_ONE_LINE_DETECTION) {
-                            cs.pills_ctr += one_detection_line(image_matrix, *detline);
-                        } else if (cs.ca == CA_TWO_LINES_DETECTION) {
-                            cs.pills_ctr += two_detection_lines(image_matrix, detline);
-                        } else {
-                            // one that works best
-                            cs.pills_ctr += one_detection_line_hys1(image_matrix, *detline);
-                        }
-                        
-                        fr_face = esp_timer_get_time();
-                        fr_recognize = fr_face;
-
-                        // if(!fmt2jpg(image_matrix->item, image_matrix->w*image_matrix->h*3, image_matrix->w, image_matrix->h, PIXFORMAT_RGB888, 90, &_jpg_buf, &_jpg_buf_len)){
-                        //     ESP_LOGE(TAG, "fmt2jpg failed");
-                        //     res = ESP_FAIL;
-                        // }
-
-                        // fr_encode = esp_timer_get_time();
-                    }
-                    dl_matrix3du_free(image_matrix);
-                }
+        // check if httpd monitor mode is on
+        if (!device.httpd_monitored) {
+            device.shared.fb = esp_camera_fb_get();
+            if (!device.shared.fb) {
+                ESP_LOGE(TAG, "Camera capture failed");
+                device.shared.fb = NULL;
             } else {
-                esp_camera_fb_return(fb);
-                // *fb_free = 1;
-                fb = NULL;
+                device.stats.fr_start = esp_timer_get_time();
+
+                if (device.shared.fb->width <= 400 && device.status.counter_enable) {
+                    device.shared.image_matrix = dl_matrix3du_alloc(1, device.shared.fb->width, device.shared.fb->height, 3);
+
+                    if (!device.shared.image_matrix) {
+                        ESP_LOGE(TAG, "dl_matrix3du_alloc failed");
+                    } else {
+                        fb_len = device.shared.fb->len;
+                        if (!fmt2rgb888(device.shared.fb->buf, device.shared.fb->len, device.shared.fb->format, device.shared.image_matrix->item)) {
+                            ESP_LOGE(TAG, "fmt2rgb888 failed");
+                        } else {
+                            device.stats.fr_conv_rgb888 = esp_timer_get_time();
+
+                            if (device.status.ca == CA_ONE_LINE_DETECTION_HYS_1) {
+                                device.status.counter_value += one_detection_line_hys1(device.shared.image_matrix, *device.shared.detline);
+                            } else if (device.status.ca == CA_GRID_DIVISION) {
+                                device.status.counter_value = grid_division(device.shared.image_matrix);
+                            } else if (device.status.ca == CA_ONE_LINE_DETECTION) {
+                                device.status.counter_value += one_detection_line(device.shared.image_matrix, *device.shared.detline);
+                            } else if (device.status.ca == CA_TWO_LINES_DETECTION) {
+                                device.status.counter_value += two_detection_lines(device.shared.image_matrix, device.shared.detline);
+                            } else {
+                                // one that works best
+                                device.status.counter_value += one_detection_line_hys1(device.shared.image_matrix, *device.shared.detline);
+                            }
+                            
+                            device.stats.fr_detection = esp_timer_get_time();
+                        }
+                        dl_matrix3du_free(device.shared.image_matrix);
+                    }
+                }
+                esp_camera_fb_return(device.shared.fb);
+                device.shared.fb = NULL;
+
+                if (device.status.counter_enable) {
+                    int64_t fr_end = esp_timer_get_time();
+                    int64_t conv_rgb888_time = (device.stats.fr_conv_rgb888 - device.stats.fr_start)/1000;
+                    int64_t detection_time = (device.stats.fr_detection - device.stats.fr_conv_rgb888)/1000;
+                    int64_t process_time = (device.stats.fr_detection - device.stats.fr_start)/1000;
+                    int64_t frame_time = fr_end - device.stats.last_frame;
+                    device.stats.last_frame = fr_end;
+                    frame_time /= 1000;
+                    uint32_t avg_frame_time = moving_avg_run(&device.stats.ma, frame_time);
+                    
+                    ESP_LOGD(TAG, "UNAT: %uB %ums (%.1ffps), AVG: %ums (%.1ffps), %u+%u=%u\n",
+                        (uint32_t)(fb_len),
+                        (uint32_t)frame_time, 1000.0 / (uint32_t)frame_time,
+                        avg_frame_time, 1000.0 / avg_frame_time,
+                        (uint32_t)conv_rgb888_time, (uint32_t)detection_time, (uint32_t)process_time
+                    );
+                }
             }
         }
     }

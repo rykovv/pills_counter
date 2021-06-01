@@ -10,13 +10,6 @@
 #include "ml_counter/ml_counter.h"
 #include "dl_lib_matrix3d.h"
 
-typedef struct {
-        size_t size; //number of values used for filtering
-        size_t index; //current value index
-        size_t count; //value count
-        int sum;
-        int * values; //array to be filled with values
-} ra_filter_t;
 
 typedef struct {
         httpd_req_t *req;
@@ -29,42 +22,11 @@ static const char* _STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" 
 static const char* _STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
 static const char* _STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n";
 
-counter_status_t *_cs = NULL;
-volatile uint8_t * volatile _fb_free = NULL;
+device_t *_dev = NULL;
 
-static ra_filter_t ra_filter;
 httpd_handle_t pills_httpd = NULL;
 httpd_handle_t camera_httpd = NULL;
 
-
-static ra_filter_t * ra_filter_init(ra_filter_t * filter, size_t sample_size){
-    memset(filter, 0, sizeof(ra_filter_t));
-
-    filter->values = (int *)malloc(sample_size * sizeof(int));
-    if(!filter->values){
-        return NULL;
-    }
-    memset(filter->values, 0, sample_size * sizeof(int));
-
-    filter->size = sample_size;
-    return filter;
-}
-
-/* moving average of frames per second */
-static int ra_filter_run(ra_filter_t * filter, int value){
-    if(!filter->values){
-        return value;
-    }
-    filter->sum -= filter->values[filter->index];
-    filter->values[filter->index] = value;
-    filter->sum += filter->values[filter->index];
-    filter->index++;
-    filter->index = filter->index % filter->size;
-    if (filter->count < filter->size) {
-        filter->count++;
-    }
-    return filter->sum / filter->count;
-}
 
 static esp_err_t index_handler(httpd_req_t *req) {
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
@@ -76,40 +38,25 @@ static esp_err_t pills_handler(httpd_req_t *req) {
     esp_err_t res = ESP_OK;
     char *ctr_str = (char *)malloc(sizeof(char)*10);
 
-    sprintf(ctr_str, "%llu", _cs->pills_ctr);
+    sprintf(ctr_str, "%llu", _dev->status.counter_value);
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     res = httpd_resp_send(req, (const char *)ctr_str, strlen(ctr_str));
     
     return res;
 }
 
-extern EventGroupHandle_t evGroup;
+// extern EventGroupHandle_t evGroup;
 
-/* Note, currently shares ra_filter with /stream endpoint */
-static esp_err_t counter_handler(httpd_req_t *req) {
-    camera_fb_t * fb = NULL;
+static esp_err_t counter_handler (httpd_req_t *req) {
     esp_err_t res = ESP_OK;
+    uint8_t *_jpg_buf = NULL;
     size_t _jpg_buf_len = 0;
-    uint8_t * _jpg_buf = NULL;
-    char * part_buf[64];
+    char *part_buf[64];
 
-    int64_t fr_start = 0;
-    int64_t fr_face = 0;
-    int64_t fr_recognize = 0;
-    int64_t fr_encode = 0;
-    int64_t fr_ready = 0;
+    _dev->httpd_monitored = 1;
 
-
-    // memset(detline, 0, NUM_FRAMES*2);
-    // memset(detline, PILL_NO, NUM_FRAMES*2);
-    uint16_t detline[NUM_FRAMES][2];
-
-    ml_counter_init(detline);
-    set_ml_model(classify_rf_d40);
-
-    static int64_t last_frame = 0;
-    if(!last_frame) {
-        last_frame = esp_timer_get_time();
+    if (!_dev->stats.last_frame) {
+        _dev->stats.last_frame = esp_timer_get_time();
     }
 
     res = httpd_resp_set_type(req, _STREAM_CONTENT_TYPE);
@@ -118,36 +65,64 @@ static esp_err_t counter_handler(httpd_req_t *req) {
     }
 
     for (;;) {
-        // wait for fb to be taken
-        // while (!(*_fb_free));
-        // *_fb_free = 0;
-        fb = esp_camera_fb_get();
-        if (!fb) {
-            ESP_LOGD(TAG, "Camera capture failed");
+        _dev->shared.fb = esp_camera_fb_get();
+        if (!_dev->shared.fb) {
+            ESP_LOGE(TAG, "Camera capture failed");
             res = ESP_FAIL;
         } else {
-            fr_start = esp_timer_get_time();
-            fr_ready = fr_start;
-            fr_face = fr_start; 
-            fr_encode = fr_start;
-            fr_recognize = fr_start;
+            _dev->stats.fr_start = esp_timer_get_time();
 
-            if (fb->format != PIXFORMAT_JPEG) {
-                bool jpeg_converted = frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len);
-                if(!jpeg_converted){
-                    ESP_LOGD(TAG, "JPEG compression failed");
-                    res = ESP_FAIL;
+            if (_dev->shared.fb->width > 400 || !_dev->status.counter_enable) {
+                if (_dev->shared.fb->format != PIXFORMAT_JPEG) {
+                    if(!frame2jpg(_dev->shared.fb, 80, &_jpg_buf, &_jpg_buf_len)){
+                        ESP_LOGE(TAG, "JPEG compression failed");
+                        res = ESP_FAIL;
+                    } else {
+                        esp_camera_fb_return(_dev->shared.fb);
+                        _dev->shared.fb = NULL;
+                    }
+                } else {
+                    _jpg_buf = _dev->shared.fb->buf;
+                    _jpg_buf_len = _dev->shared.fb->len;
                 }
             } else {
-                // copy jpg and release fb
-                _jpg_buf = (uint8_t *) malloc(sizeof(uint8_t)*(fb->height*fb->width*3));
-                memcpy(_jpg_buf, fb->buf, fb->height*fb->width*3);
-                _jpg_buf_len = fb->len;
-                // _jpg_buf = fb->buf;
+                _dev->shared.image_matrix = dl_matrix3du_alloc(1, _dev->shared.fb->width, _dev->shared.fb->height, 3);
+
+                if (!_dev->shared.image_matrix) {
+                    ESP_LOGE(TAG, "dl_matrix3du_alloc failed");
+                    res = ESP_FAIL;
+                } else {
+                    if(!fmt2rgb888(_dev->shared.fb->buf, _dev->shared.fb->len, _dev->shared.fb->format, _dev->shared.image_matrix->item)){
+                        ESP_LOGE(TAG, "fmt2rgb888 failed");
+                        res = ESP_FAIL;
+                    } else {
+                        _dev->stats.fr_conv_rgb888 = esp_timer_get_time();
+
+                        if (_dev->status.ca == CA_ONE_LINE_DETECTION_HYS_1) {
+                            _dev->status.counter_value += one_detection_line_hys1(_dev->shared.image_matrix, *_dev->shared.detline);
+                        } else if (_dev->status.ca == CA_GRID_DIVISION) {
+                            _dev->status.counter_value = grid_division(_dev->shared.image_matrix);
+                        } else if (_dev->status.ca == CA_ONE_LINE_DETECTION) {
+                            _dev->status.counter_value += one_detection_line(_dev->shared.image_matrix, *_dev->shared.detline);
+                        } else if (_dev->status.ca == CA_TWO_LINES_DETECTION) {
+                            _dev->status.counter_value += two_detection_lines(_dev->shared.image_matrix, _dev->shared.detline);
+                        } else {
+                            // one that works best
+                            _dev->status.counter_value += one_detection_line_hys1(_dev->shared.image_matrix, *_dev->shared.detline);
+                        }
+                        _dev->stats.fr_detection = esp_timer_get_time();
+                        
+                        if(!fmt2jpg(_dev->shared.image_matrix->item, _dev->shared.image_matrix->w*_dev->shared.image_matrix->h*3, _dev->shared.image_matrix->w, _dev->shared.image_matrix->h, PIXFORMAT_RGB888, 90, &_jpg_buf, &_jpg_buf_len)){
+                            ESP_LOGE(TAG, "fmt2jpg failed");
+                            res = ESP_FAIL;
+                        }
+                        _dev->stats.fr_encode = esp_timer_get_time();
+                    }
+                    esp_camera_fb_return(_dev->shared.fb);
+                    _dev->shared.fb = NULL;
+                    dl_matrix3du_free(_dev->shared.image_matrix);
+                }
             }
-            esp_camera_fb_return(fb);
-            // *_fb_free = 0;
-            fb = NULL;
         }
         if(res == ESP_OK){
             res = httpd_resp_send_chunk(req, _STREAM_BOUNDARY, strlen(_STREAM_BOUNDARY));
@@ -159,44 +134,39 @@ static esp_err_t counter_handler(httpd_req_t *req) {
         if(res == ESP_OK){
             res = httpd_resp_send_chunk(req, (const char *)_jpg_buf, _jpg_buf_len);
         }
-
-        if(fb){
-            esp_camera_fb_return(fb);
-            // *_fb_free = 0;
-            fb = NULL;
+        if(_dev->shared.fb){
+            esp_camera_fb_return(_dev->shared.fb);
+            _dev->shared.fb = NULL;
             _jpg_buf = NULL;
-        } else if(_jpg_buf) {
+        } else if(_jpg_buf){
             free(_jpg_buf);
             _jpg_buf = NULL;
         }
-
-        if (res != ESP_OK) {
+        if(res != ESP_OK){
             break;
         }
 
         int64_t fr_end = esp_timer_get_time();
-        int64_t ready_time = (fr_ready - fr_start)/1000;
-        int64_t face_time = (fr_face - fr_ready)/1000;
-        int64_t recognize_time = (fr_recognize - fr_face)/1000;
-        int64_t encode_time = (fr_encode - fr_recognize)/1000;
-        int64_t process_time = (fr_encode - fr_start)/1000;
-        int64_t frame_time = fr_end - last_frame;
-        last_frame = fr_end;
+        int64_t conv_rgb888_time = (_dev->stats.fr_conv_rgb888 - _dev->stats.fr_start)/1000;
+        int64_t detection_time = (_dev->stats.fr_detection - _dev->stats.fr_conv_rgb888)/1000;
+        int64_t encode_time = (_dev->stats.fr_encode - _dev->stats.fr_detection)/1000;
+        int64_t process_time = (_dev->stats.fr_encode - _dev->stats.fr_start)/1000;
+        int64_t frame_time = fr_end - _dev->stats.last_frame;
+        _dev->stats.last_frame = fr_end;
         frame_time /= 1000;
-        uint32_t avg_frame_time = ra_filter_run(&ra_filter, frame_time);
-        if (1) {
-            ESP_LOGD(TAG, "MJPG: %uB %ums (%.1ffps), AVG: %ums (%.1ffps), %u+%u+%u+%u=%u %s%d\n",
-                (uint32_t)(_jpg_buf_len),
-                (uint32_t)frame_time, 1000.0 / (uint32_t)frame_time,
-                avg_frame_time, 1000.0 / avg_frame_time,
-                (uint32_t)ready_time, (uint32_t)face_time, (uint32_t)recognize_time, (uint32_t)encode_time, (uint32_t)process_time,
-                (detected)?"DETECTED ":"", face_id
-            );
-        }
+        uint32_t avg_frame_time = moving_avg_run(&_dev->stats.ma, frame_time);
+
+        ESP_LOGD(TAG, "MJPG: %uB %ums (%.1ffps), AVG: %ums (%.1ffps), %u+%u+%u=%u\n",
+            (uint32_t)(_jpg_buf_len),
+            (uint32_t)frame_time, 1000.0 / (uint32_t)frame_time,
+            avg_frame_time, 1000.0 / avg_frame_time,
+            (uint32_t)conv_rgb888_time, (uint32_t)detection_time, (uint32_t)encode_time, (uint32_t)process_time
+        );
     }
 
-    ESP_LOGD(TAG, "Stream ended");
-    last_frame = 0;
+    ESP_LOGI(TAG, "Stream ended");
+    _dev->httpd_monitored = 0;
+    
     return res;
 }
 
@@ -234,12 +204,12 @@ static esp_err_t cmd_handler(httpd_req_t *req){
 
     ESP_LOGD(TAG, "cmd_handler: '%s' -> '%s'\n", variable, value);
 
-    if(!strcmp(variable, "c")) _cs->counter_enable = (uint8_t) atoi(value);
-    else if(!strcmp(variable, "ca")) _cs->ca = (counting_algorithm_t) atoi(value);
-    else if(!strcmp(variable, "a")) _cs->alarm_enable = (uint8_t) atoi(value);
-    else if(!strcmp(variable, "ac")) _cs->alarm_count = (uint64_t) atoll(value);
-    else if(!strcmp(variable, "al")) strncpy(_cs->alarm_link, value, ALARM_LINK_MAX_SIZE);
-    else if(!strcmp(variable, "rc")) _cs->pills_ctr = 0; // reset counter
+    if(!strcmp(variable, "c")) _dev->status.counter_enable = (uint8_t) atoi(value);
+    else if(!strcmp(variable, "ca")) _dev->status.ca = (counting_algorithm_t) atoi(value);
+    else if(!strcmp(variable, "a")) _dev->status.alarm_enable = (uint8_t) atoi(value);
+    else if(!strcmp(variable, "ac")) _dev->status.alarm_count = (uint64_t) atoll(value);
+    else if(!strcmp(variable, "al")) strncpy(_dev->status.alarm_link, value, ALARM_LINK_MAX_SIZE);
+    else if(!strcmp(variable, "rc")) _dev->status.counter_value = 0; // reset counter
     else if(!strcmp(variable, "rd")) esp_restart(); // reset board
     else {
         return httpd_resp_send_500(req);
@@ -255,24 +225,22 @@ static esp_err_t status_handler(httpd_req_t *req){
     char * p = json_response;
     *p++ = '{';
 
-    p+=sprintf(p, "\"c\":%u,", _cs->counter_enable); // Counter Enable
-    p+=sprintf(p, "\"ca\":%u,", (uint8_t)_cs->ca); // Counting Algorithm
-    p+=sprintf(p, "\"a\":%d,", _cs->alarm_enable); // Alarm Enable
-    p+=sprintf(p, "\"ac\":%llu,", _cs->alarm_count); // Alarm Count
-    p+=sprintf(p, "\"al\":\"%s\"", _cs->alarm_link); // Alarm Link
+    p+=sprintf(p, "\"c\":%u,", _dev->status.counter_enable); // Counter Enable
+    p+=sprintf(p, "\"ca\":%u,", (uint8_t)_dev->status.ca); // Counting Algorithm
+    p+=sprintf(p, "\"a\":%d,", _dev->status.alarm_enable); // Alarm Enable
+    p+=sprintf(p, "\"ac\":%llu,", _dev->status.alarm_count); // Alarm Count
+    p+=sprintf(p, "\"al\":\"%s\"", _dev->status.alarm_link); // Alarm Link
     *p++ = '}';
     *p++ = 0;
-
-    ESP_LOGD(TAG, "status_handler: %s\n", json_response);
     
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     return httpd_resp_send(req, json_response, strlen(json_response));
 }
 
-void httpd_server_init(counter_status_t *n_cs, volatile uint8_t *n_fb_free) {
-    _cs = n_cs;
-    _fb_free = n_fb_free;
+void httpd_server_init(device_t *ndev) {
+    _dev = ndev;
+
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
 
     httpd_uri_t index_uri = {
@@ -310,8 +278,6 @@ void httpd_server_init(counter_status_t *n_cs, volatile uint8_t *n_fb_free) {
         .user_ctx  = NULL
     };
 
-    ra_filter_init(&ra_filter, 20);
-
     ESP_LOGD(TAG, "Starting web server on port: '%d'", config.server_port);
     if (httpd_start(&pills_httpd, &config) == ESP_OK) {
         httpd_register_uri_handler(pills_httpd, &index_uri);
@@ -320,6 +286,7 @@ void httpd_server_init(counter_status_t *n_cs, volatile uint8_t *n_fb_free) {
         httpd_register_uri_handler(pills_httpd, &status_uri);
     }
 
+    config.stack_size = 10000;
     config.server_port++;
     config.ctrl_port++;
     if (httpd_start(&camera_httpd, &config) == ESP_OK) {

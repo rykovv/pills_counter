@@ -7,16 +7,16 @@
 extern "C" {
 #endif
 
-/* Random Forest classifier forest depth 20 */
+/* Random Forest classifier forest depth 20. 3ms inference time */
 uint8_t classify_rf_d20 (uint8_t *sample);
 
-/* Random Forest classifier forest depth 30 */
+/* Random Forest classifier forest depth 30. 3ms inference time */
 uint8_t classify_rf_d30 (uint8_t *sample);
 
-/* Random Forest classifier forest depth 40 */
+/* Random Forest classifier forest depth 40. 3ms inference time */
 uint8_t classify_rf_d40 (uint8_t *sample);
 
-/* Support Vector Machine (SVM) classifier */
+/* Support Vector Machine (SVM) classifier. 989ms inference time */
 uint8_t classify_svm (uint8_t *sample);
 
 #ifdef __cplusplus
