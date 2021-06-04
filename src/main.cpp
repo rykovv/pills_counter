@@ -12,80 +12,89 @@
 #include "dl_lib_matrix3d.h"
 #include "ml_counter/ml_counter.h"
 
-#ifdef CORE_DEBUG_LEVEL
-#endif
-//#define ENABLE_SSD1306
-#define ENABLE_BUTTON
-#define ENABLE_ALARM
-// #define SOFTAP_MODE       //The comment will be connected to the specified ssid
-#define BAUDRATE          115200
 
-/* BOARD PINS */
-#define PWDN_GPIO_NUM     26
-#define RESET_GPIO_NUM    -1
-#define XCLK_GPIO_NUM     32
-#define SIOD_GPIO_NUM     13
-#define SIOC_GPIO_NUM     12
+#define ENABLE_SSD1306  0       ///< Set 1 enable to SSD1306 OLED display feature
+#define ENABLE_BUTTON   1       ///< Set 1 to enable image flip through button 34
+#define ENABLE_ALARM    1       ///< Set 1 to enable use of alarm. A works as a callback when the counter value reaches alarm threashold
+#define SOFTAP_MODE     0       ///< Set 1 to enable Soft Access Point WiFi mode.
 
-#define Y9_GPIO_NUM       39
-#define Y8_GPIO_NUM       36
-#define Y7_GPIO_NUM       23
-#define Y6_GPIO_NUM       18
-#define Y5_GPIO_NUM       15
-#define Y4_GPIO_NUM       4
-#define Y3_GPIO_NUM       14
-#define Y2_GPIO_NUM       5
-#define VSYNC_GPIO_NUM    27
-#define HREF_GPIO_NUM     25
-#define PCLK_GPIO_NUM     19
+#define BAUDRATE        115200  ///< Serial baudrate
+#define ALARM_JSON_SIZE 128     ///< Max json string size for alarm report
 
-#define I2C_SDA           21
-#define I2C_SCL           22
+#define PWDN_GPIO_NUM   26      ///< PWD camera pin
+#define RESET_GPIO_NUM  -1      ///< RST camera pin
+#define XCLK_GPIO_NUM   32      ///< XCLK camera pin
+#define SIOD_GPIO_NUM   13      ///< SIOD camera pin
+#define SIOC_GPIO_NUM   12      ///< SIOC camera pin
 
-#ifndef SOFTAP_MODE
-#define WIFI_SSID         "SpectrumSetup-28"
-#define WIFI_PASSWD       "heartylion234"
+#define Y9_GPIO_NUM     39      ///< Y9 camera pin
+#define Y8_GPIO_NUM     36      ///< Y8 camera pin
+#define Y7_GPIO_NUM     23      ///< Y7 camera pin
+#define Y6_GPIO_NUM     18      ///< Y6 camera pin
+#define Y5_GPIO_NUM     15      ///< Y5 camera pin
+#define Y4_GPIO_NUM     4       ///< Y4 camera pin
+#define Y3_GPIO_NUM     14      ///< Y3 camera pin
+#define Y2_GPIO_NUM     5       ///< Y2 camera pin
+#define VSYNC_GPIO_NUM  27      ///< VSNC camera pin
+#define HREF_GPIO_NUM   25      ///< HREF camera pin
+#define PCLK_GPIO_NUM   19      ///< PCLK camera pin
+
+#define I2C_SDA         21      ///< SDA I2C board pin
+#define I2C_SCL         22      ///< SCL I2C board pin
+
+#define AS312_PIN       33      ///< PIR Sensor pin
+#define BUTTON_1        34      ///< Board button
+
+#if !SOFTAP_MODE
+#define WIFI_SSID       "SpectrumSetup-28"  ///< SSID for WiFi connection
+#define WIFI_PASSWD     "heartylion234"     ///< Password for WiFi connection
 #endif
 
 /* Enabling OLED */
-#ifdef ENABLE_SSD1306
+#if ENABLE_SSD1306
 #include "SSD1306.h"
 #include "OLEDDisplayUi.h"
-#define SSD1306_ADDRESS   0x3c
+#define SSD1306_ADDRESS   0x3c  ///< SSD1306 I2C address
 
 SSD1306 oled(SSD1306_ADDRESS, I2C_SDA, I2C_SCL);
 OLEDDisplayUi ui(&oled);
 #endif
 
-/* PIR Sensor pin */
-#define AS312_PIN 33
-/* Board button */
-#ifdef ENABLE_BUTTON
-#define BUTTON_1 34
+#if ENABLE_BUTTON
 OneButton button1(BUTTON_1, true);
 #endif
 
-#ifdef ENABLE_ALARM
+#if ENABLE_ALARM
 #include "esp_http_client.h"
 hw_timer_t *timer = NULL;
 volatile uint8_t sample_flag = 0;
 
 void IRAM_ATTR onTimer();
-esp_err_t _http_event_handle(esp_http_client_event_t *evt);
+static esp_err_t _http_event_handle(esp_http_client_event_t *evt);
 #endif
 
 String ip;
+uint8_t mac[6];
 EventGroupHandle_t evGroup;
 
-device_t device;
+device_t device;    ///< Device status & control structure
 
-// void device_update_task (void *parameter);
+/**
+ * Thread worker for unattended device mode. 
+ * 
+ * Gets next image, performs counting processing 
+ *      (strategy+classification), and updates 
+ *      the counter value. Throughput is ~8 fps, 
+ *      340% improvement with respect to httpd monitored mode. 
+ * @param[in] parameter Pointer to thread input args.
+*/
 void counting_task (void *parameter);
 
-#ifdef ENABLE_BUTTON
-/* Some functionality associated with the button1 */
-void button1Func()
-{
+#if ENABLE_BUTTON
+/** 
+ * Flip image. Functionality associated with the button1
+*/
+void button1Func() {
     static bool en = false;
     xEventGroupClearBits(evGroup, 1);
     sensor_t *s = esp_camera_sensor_get();
@@ -96,10 +105,16 @@ void button1Func()
 }
 #endif
 
-/* Refresh OLED */
-#ifdef ENABLE_SSD1306
-void drawFrame1(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
+#if ENABLE_SSD1306
+/**
+ *  Refreshes frame 1 of the OLED display UI. Additional functionality can be added here,
+ *      i.e. device's connectivity mode and IP address.
+ *  @param[in] display  pointer to the display driver 
+ *  @param[in] state    pointer to the UI state
+ *  @param[in] x        x-coordinate associated with the writing cursor
+ *  @param[in] y        y-coordinate associated with the writing cursor 
+*/
+void drawFrame1(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
     display->setFont(ArialMT_Plain_16);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->drawString(64 + x, 35 + y, ip);
@@ -109,26 +124,16 @@ void drawFrame1(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int1
     }
 }
 
+/**
+ *  Refreshes frame 2 of the OLED display UI. Additional functionality can be added here,
+ *      i.e. device's connectivity mode and IP address.
+ *  @param[in] display  pointer to the display driver 
+ *  @param[in] state    pointer to the UI state
+ *  @param[in] x        x-coordinate associated with the writing cursor
+ *  @param[in] y        y-coordinate associated with the writing cursor 
+*/
 void drawFrame2(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-#ifdef ENABLE_BME280
-    static String temp, pressure, altitude, humidity;
-    static uint64_t lastMs;
-
-    if (millis() - lastMs > 2000) {
-        lastMs = millis();
-        temp = "Temp:" + String(bme.readTemperature()) + " *C";
-        pressure = "Press:" + String(bme.readPressure() / 100.0F) + " hPa";
-        altitude = "Altitude:" + String(bme.readAltitude(SEALEVELPRESSURE_HPA)) + " m";
-        humidity = "Humidity:" + String(bme.readHumidity()) + " %";
-    }
-    display->setFont(ArialMT_Plain_16);
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->drawString(0 + x, 0 + y, temp);
-    display->drawString(0 + x, 16 + y, pressure);
-    display->drawString(0 + x, 32 + y, altitude);
-    display->drawString(0 + x, 48 + y, humidity);
-#endif
     display->setFont(ArialMT_Plain_16);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->drawString(0 + x, 0 + y, "Number of pills:");
@@ -139,14 +144,14 @@ FrameCallback frames[] = {drawFrame1, drawFrame2};
 #define FRAMES_SIZE (sizeof(frames) / sizeof(frames[0]))
 #endif
 
-////////////////////////////////////////////////////////////////////////////////////////
+
 void setup() {
     Serial.begin(BAUDRATE);
     Serial.setDebugOutput(true);
     Serial.println();
 
-#ifdef ENABLE_SSD1306
-    // config OLED
+#if ENABLE_SSD1306
+    /* config OLED display driver */
     oled.init();
     oled.setFont(ArialMT_Plain_16);
     oled.setTextAlignment(TEXT_ALIGN_CENTER);
@@ -164,7 +169,7 @@ void setup() {
     }
     xEventGroupSetBits(evGroup, 1);
 
-    /* config camera */
+    /* config camera struct init */
     camera_config_t config;
     config.ledc_channel = LEDC_CHANNEL_0;
     config.ledc_timer = LEDC_TIMER_0;
@@ -186,16 +191,15 @@ void setup() {
     config.pin_reset = RESET_GPIO_NUM;
     config.xclk_freq_hz = 20000000;
     config.pixel_format = PIXFORMAT_JPEG;
-    //init with high specs to pre-allocate larger buffers
     config.frame_size = FRAMESIZE_240X240;
     config.jpeg_quality = 10;
     config.fb_count = 2;
 
-    // camera init
+    /* camera sensor init */
     esp_err_t err = esp_camera_init(&config);
     if (err != ESP_OK) {
         ESP_LOGD(TAG, "Camera init Fail");
-#ifdef ENABLE_SSD1306
+#if ENABLE_SSD1306
         oled.clear();
         oled.drawString(oled.getWidth() / 2, oled.getHeight() / 2, "Camera init Fail");
         oled.display();
@@ -203,44 +207,20 @@ void setup() {
         while (1);
     }
 
-    //set up camera sensor
+    /* Additional setup for camera sensor */
     sensor_t *s = esp_camera_sensor_get();
-    //s->set_vflip(s, 1);
+    /* Flip image initially if necessary */
+    // s->set_vflip(s, 1);
+    /* Black and white special effect set */
     s->set_special_effect(s, 2);
-    /*
-    s->set_quality(s, 10);
-    s->set_contrast(s, 0);
-    s->set_brightness(s, 0);
-    s->set_saturation(s, 0);
-    s->set_gainceiling(s, GAINCEILING_2X);
-    s->set_colorbar(s, 0);
-    s->set_whitebal(s, 0);
-    s->set_gain_ctrl(s, 1);
-    s->set_exposure_ctrl(s, 1);
-    s->set_hmirror(s, 0);
-    s->set_vflip(s, 1);
-    s->set_awb_gain(s, 1);
-    s->set_agc_gain(s, 10);
-    s->set_aec_value(s, 1);
-    s->set_aec2(s, 0);
-    s->set_dcw(s, 1);
-    s->set_bpc(s, 0);
-    s->set_wpc(s, 1);
-    s->set_raw_gma(s, 1);
-    s->set_lenc(s, 1);
-    s->set_special_effect(s, 0);
-    s->set_wb_mode(s, 1);
-    s->set_ae_level(s, 0);
-    */
 
     /* Attach button1 functionality */
-    #ifdef ENABLE_BUTTON
+    #if ENABLE_BUTTON
     button1.attachClick(button1Func);
     #endif
 
-    #ifdef SOFTAP_MODE
+    #if SOFTAP_MODE
     /* Setup AP */
-    uint8_t mac[6];
     char buff[128];
     WiFi.mode(WIFI_AP);
     IPAddress apIP = IPAddress(2, 2, 2, 1);
@@ -253,6 +233,7 @@ void setup() {
         while (1);
     }
     #else
+    /* Connect to WiFi */
     WiFi.begin(WIFI_SSID, WIFI_PASSWD);
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
@@ -262,23 +243,25 @@ void setup() {
     Serial.println("WiFi connected");
     #endif
 
-#ifdef ENABLE_SSD1306
+#if ENABLE_SSD1306
     oled.clear();
     oled.drawString(oled.getWidth() / 2, oled.getHeight() / 2, "WiFi Connected");
     oled.display();
 #endif
 
+    /* Moving average struct intialization */
     moving_avg_init(&device.stats.ma, MOVING_AVG_SAMPLES);
+    /* Set detline vector to default values */
     ml_counter_init(device.shared.detline);
-    /* Setting Random Forest ML classification model */
+    /* Set Random Forest ML classification model */
     set_ml_model(classify_rf_d40);
     /* Start httpd monitor server */
     httpd_server_init(&device);
 
     delay(50);
 
-    /* Do cool unnecessary staff with OLED */
-#ifdef ENABLE_SSD1306
+#if ENABLE_SSD1306
+    /* Setup UI */
     ui.setTargetFPS(60);
     ui.setIndicatorPosition(BOTTOM);
     ui.setIndicatorDirection(LEFT_RIGHT);
@@ -288,8 +271,7 @@ void setup() {
     ui.init();
 #endif
 
-
-#ifdef SOFTAP_MODE
+#if SOFTAP_MODE
     ip = WiFi.softAPIP().toString();
     Serial.printf("\nAp Started .. Please Connect %s hotspot\n", buff);
 #else
@@ -300,44 +282,53 @@ void setup() {
     Serial.print(ip);
     Serial.println("' to connect");
 
-#ifdef ENABLE_ALARM
+#if ENABLE_ALARM
+    /* Setup timer and associated interrupt */
     timer = timerBegin(0, 80, true);
     timerAttachInterrupt(timer, &onTimer, true);
     timerAlarmWrite(timer, 1000000, true); // check counter every second
     timerAlarmEnable(timer);
 #endif
 
-    xTaskCreate(counting_task,          /* Task function. */
-                "counting_task",        /* String with name of task. */
-                10000,//5120,                   /* Stack size in bytes. */
-                NULL,                   /* Parameter passed as input of the task */
-                1,                      /* Priority of the task. */
-                NULL);                  /* Task handle. */
+    /* Create counting worker for unattended mode */
+    xTaskCreate (
+        counting_task,          /* Task function. */
+        "counting_task",        /* String with name of task. */
+        5120,                   /* Stack size in bytes. */
+        NULL,                   /* Parameter passed as input of the task */
+        1,                      /* Priority of the task. */
+        NULL                    /* Task handle. */
+    );                  
 }
 
 void loop () {
-// void device_update_task (void *parameter) {
-    #ifdef ENABLE_SSD1306
+    #if ENABLE_SSD1306
     if (ui.update()) {
 #endif
-#ifdef ENABLE_BUTTON
+#if ENABLE_BUTTON
         button1.tick();
 #endif
-#ifdef ENABLE_SSD1306
+#if ENABLE_SSD1306
     }
 #endif
-#ifdef ENABLE_ALARM
+#if ENABLE_ALARM
+    /* Alarm check */
     if (sample_flag) {
+        /* Send JSON alarm if condition is met */
         if (device.status.alarm_enable && device.status.counter_value >= device.status.alarm_count
                                         && strlen(device.status.alarm_link) > 10) 
         {
             // url correct form -> "http://<ip>:<port>/<path>/"
             esp_http_client_config_t config = {.url = device.status.alarm_link};
 
-            char *alarm_json = (char *)malloc(sizeof(char)*128);
-            uint8_t mac[6];
-            esp_wifi_get_mac(WIFI_IF_AP, mac);            
-            snprintf(alarm_json, 128, "{\"id\":\"PILLS-COUNTER-%02X:%02X\",\"counter\":%llu, \"alarm\":1}",mac[4],mac[5], device.status.counter_value);
+            char *alarm_json = (char *)malloc(sizeof(char)*ALARM_JSON_SIZE);
+            esp_wifi_get_mac(WIFI_IF_AP, mac);           
+            snprintf(   alarm_json, 
+                        ALARM_JSON_SIZE, 
+                        "{\"id\":\"PILLS-COUNTER-%02X:%02X\",\"counter\":%llu, \"alarm\":1}",
+                        mac[4], mac[5], 
+                        device.status.counter_value
+            );
             esp_http_client_handle_t client = esp_http_client_init(&config);
             esp_http_client_set_method(client, HTTP_METHOD_POST);
             esp_http_client_set_post_field(client, alarm_json, strlen(alarm_json));
@@ -367,7 +358,6 @@ void counting_task (void *parameter) {
     }
 
     for (;;) {
-        // check if httpd monitor mode is on
         if (!device.httpd_monitored) {
             device.shared.fb = esp_camera_fb_get();
             if (!device.shared.fb) {
@@ -431,7 +421,7 @@ void counting_task (void *parameter) {
     }
 }
 
-#ifdef ENABLE_ALARM
+#if ENABLE_ALARM
 void IRAM_ATTR onTimer() {
     sample_flag = 1;
 }
