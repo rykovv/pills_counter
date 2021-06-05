@@ -1,4 +1,5 @@
 #include "ml_counter/ml_counter.h"
+#include "esp_camera.h"
 
 typedef enum {
     PILL_NO = 0,
@@ -10,8 +11,11 @@ typedef enum {
 
 uint8_t (*classifier)(uint8_t *);
 
-void ml_counter_init(uint16_t detline[NUM_FRAMES][2]) {
-    memset(detline, PILL_NO, NUM_FRAMES*2);
+void ml_counter_init(uint16_t detline[NUM_SUBFRAMES][2]) {
+    sensor_t *s = esp_camera_sensor_get();
+    assert(s->status.framesize == FRAMESIZE_240X240);
+
+    memset(detline, PILL_NO, NUM_SUBFRAMES*2);
 }
 
 void set_ml_model(uint8_t (*nclassifier)(uint8_t *)) {
@@ -75,12 +79,12 @@ uint16_t one_detection_line(dl_matrix3du_t *image_matrix, uint16_t *detline) {
                 // pstart = -1 [++ -> 0] or 
                 // detline[pstart] = PILL_NO [++ -> PILL_DISAPPEARED or PILL_DETECTED]
                 pstart++;
-                while (pstart < NUM_FRAMES && detline[pstart] == PILL_DISAPPEARED) pstart++;
+                while (pstart < NUM_SUBFRAMES && detline[pstart] == PILL_DISAPPEARED) pstart++;
                 
                 // if all frames are PILL_DISAPPEARED then pstart is on PILL_NO or overflowed
-                if (pstart == NUM_FRAMES || detline[pstart] == PILL_NO) {
+                if (pstart == NUM_SUBFRAMES || detline[pstart] == PILL_NO) {
                     pctr++;
-                    // pstart = NUM_FRAMES [-- -> NUM_FRAMES-1] or 
+                    // pstart = NUM_SUBFRAMES [-- -> NUM_SUBFRAMES-1] or 
                     // detline[pstart] = PILL_NO [-- -> PILL_DISAPPEARED]
                     pstart--;
                     ESP_LOGD(TAG, "pill summed f = %d\n", pstart);
@@ -96,7 +100,7 @@ uint16_t one_detection_line(dl_matrix3du_t *image_matrix, uint16_t *detline) {
     return pctr;
 }
 
-uint16_t two_detection_lines(dl_matrix3du_t *image_matrix, uint16_t detline[NUM_FRAMES][2]) {
+uint16_t two_detection_lines(dl_matrix3du_t *image_matrix, uint16_t detline[NUM_SUBFRAMES][2]) {
     uint16_t si = 0;
     uint16_t pctr = 0;
     uint16_t nframe = 0;
@@ -152,12 +156,12 @@ uint16_t two_detection_lines(dl_matrix3du_t *image_matrix, uint16_t detline[NUM_
                 // pstart = -1 [++ -> 0] or 
                 // detline[pstart] = PILL_NO [++ -> PILL_DISAPPEARED or PILL_DETECTED]
                 pstart++;
-                while (pstart < NUM_FRAMES && (detline[pstart][1] == PILL_DISAPPEARED || detline[pstart][1] == PILL_EXPECTED)) pstart++;
+                while (pstart < NUM_SUBFRAMES && (detline[pstart][1] == PILL_DISAPPEARED || detline[pstart][1] == PILL_EXPECTED)) pstart++;
                 
                 // if all frames are PILL_DISAPPEARED then pstart is on PILL_NO or overflowed
-                if (pstart == NUM_FRAMES || detline[pstart][1] == PILL_NO) {
+                if (pstart == NUM_SUBFRAMES || detline[pstart][1] == PILL_NO) {
                     pctr++;
-                    // pstart = NUM_FRAMES [-- -> NUM_FRAMES-1] or 
+                    // pstart = NUM_SUBFRAMES [-- -> NUM_SUBFRAMES-1] or 
                     // detline[pstart] = PILL_NO [-- -> PILL_DISAPPEARED]
                     pstart--;
                     ESP_LOGD(TAG, "pill summed f = %d\n", pstart);
@@ -208,12 +212,12 @@ uint16_t one_detection_line_hys1(dl_matrix3du_t *image_matrix, uint16_t *detline
                 // pstart = -1 [++ -> 0] or 
                 // detline[pstart] = PILL_NO [++ -> PILL_DISAPPEARED or PILL_DETECTED]
                 pstart++;
-                while (pstart < NUM_FRAMES && detline[pstart] == PILL_DISAPPEARED_HYS_1) pstart++;
+                while (pstart < NUM_SUBFRAMES && detline[pstart] == PILL_DISAPPEARED_HYS_1) pstart++;
                 
                 // if all frames are PILL_DISAPPEARED then pstart is on PILL_NO or overflowed
-                if (pstart == NUM_FRAMES || detline[pstart] == PILL_NO) {
+                if (pstart == NUM_SUBFRAMES || detline[pstart] == PILL_NO) {
                     pctr++;
-                    // pstart = NUM_FRAMES [-- -> NUM_FRAMES-1] or 
+                    // pstart = NUM_SUBFRAMES [-- -> NUM_SUBFRAMES-1] or 
                     // detline[pstart] = PILL_NO [-- -> PILL_DISAPPEARED]
                     pstart--;
                     ESP_LOGD(TAG, "pill summed f = %d\n", pstart);

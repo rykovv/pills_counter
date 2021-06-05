@@ -63,7 +63,7 @@ typedef struct {
 typedef struct {
     camera_fb_t *fb = NULL;                 //< Frame Buffer poiner
     dl_matrix3du_t *image_matrix = NULL;    //< Image matrix pointer
-    uint16_t detline[NUM_FRAMES][2];        //< Detection line vector
+    uint16_t detline[NUM_SUBFRAMES][2];        //< Detection line vector
 } shared_data_t;
 
 /** 

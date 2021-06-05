@@ -286,7 +286,7 @@ void httpd_server_init(device_t *ndev) {
         httpd_register_uri_handler(pills_httpd, &status_uri);
     }
 
-    config.stack_size = 10000;
+    // config.stack_size = 10000; Use for SVM
     config.server_port++;
     config.ctrl_port++;
     if (httpd_start(&camera_httpd, &config) == ESP_OK) {

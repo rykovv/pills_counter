@@ -70,7 +70,6 @@ hw_timer_t *timer = NULL;
 volatile uint8_t sample_flag = 0;
 
 void IRAM_ATTR onTimer();
-static esp_err_t _http_event_handle(esp_http_client_event_t *evt);
 #endif
 
 String ip;
