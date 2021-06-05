@@ -96,7 +96,7 @@ static esp_err_t counter_handler (httpd_req_t *req) {
                         ESP_LOGE(TAG, "fmt2rgb888 failed");
                         res = ESP_FAIL;
                     } else {
-                        _dev->stats.fr_conv_rgb888 = esp_timer_get_time();
+                        _dev->stats.fr_decode = esp_timer_get_time();
 
                         if (_dev->status.ca == CA_ONE_LINE_DETECTION_HYS_1) {
                             _dev->status.counter_value += one_detection_line_hys1(_dev->shared.image_matrix, *_dev->shared.detline);
@@ -147,8 +147,8 @@ static esp_err_t counter_handler (httpd_req_t *req) {
         }
 
         int64_t fr_end = esp_timer_get_time();
-        int64_t conv_rgb888_time = (_dev->stats.fr_conv_rgb888 - _dev->stats.fr_start)/1000;
-        int64_t detection_time = (_dev->stats.fr_detection - _dev->stats.fr_conv_rgb888)/1000;
+        int64_t conv_rgb888_time = (_dev->stats.fr_decode - _dev->stats.fr_start)/1000;
+        int64_t detection_time = (_dev->stats.fr_detection - _dev->stats.fr_decode)/1000;
         int64_t encode_time = (_dev->stats.fr_encode - _dev->stats.fr_detection)/1000;
         int64_t process_time = (_dev->stats.fr_encode - _dev->stats.fr_start)/1000;
         int64_t frame_time = fr_end - _dev->stats.last_frame;

@@ -80,19 +80,23 @@ EventGroupHandle_t evGroup;
 device_t device;    ///< Device status & control structure
 
 /**
- * Thread worker for unattended device mode. 
+ * @brief Thread worker for unattended device mode. 
  * 
- * Gets next image, performs counting processing 
+ * @details Gets next image, performs counting processing 
  *      (strategy+classification), and updates 
  *      the counter value. Throughput is ~8 fps, 
- *      340% improvement with respect to httpd monitored mode. 
+ *      340% improvement with respect to the httpd monitored 
+ *      mode. 
+ * 
  * @param[in] parameter Pointer to thread input args.
 */
 void counting_task (void *parameter);
 
 #if ENABLE_BUTTON
 /** 
- * Flip image. Functionality associated with the button1
+ * @brief Flip image. 
+ * 
+ * @details Functionality associated with the button1
 */
 void button1Func() {
     static bool en = false;
@@ -109,6 +113,7 @@ void button1Func() {
 /**
  *  Refreshes frame 1 of the OLED display UI. Additional functionality can be added here,
  *      i.e. device's connectivity mode and IP address.
+ * 
  *  @param[in] display  pointer to the display driver 
  *  @param[in] state    pointer to the UI state
  *  @param[in] x        x-coordinate associated with the writing cursor
@@ -376,7 +381,7 @@ void counting_task (void *parameter) {
                         if (!fmt2rgb888(device.shared.fb->buf, device.shared.fb->len, device.shared.fb->format, device.shared.image_matrix->item)) {
                             ESP_LOGE(TAG, "fmt2rgb888 failed");
                         } else {
-                            device.stats.fr_conv_rgb888 = esp_timer_get_time();
+                            device.stats.fr_decode = esp_timer_get_time();
 
                             if (device.status.ca == CA_ONE_LINE_DETECTION_HYS_1) {
                                 device.status.counter_value += one_detection_line_hys1(device.shared.image_matrix, *device.shared.detline);
@@ -401,8 +406,8 @@ void counting_task (void *parameter) {
 
                 if (device.status.counter_enable) {
                     int64_t fr_end = esp_timer_get_time();
-                    int64_t conv_rgb888_time = (device.stats.fr_conv_rgb888 - device.stats.fr_start)/1000;
-                    int64_t detection_time = (device.stats.fr_detection - device.stats.fr_conv_rgb888)/1000;
+                    int64_t conv_rgb888_time = (device.stats.fr_decode - device.stats.fr_start)/1000;
+                    int64_t detection_time = (device.stats.fr_detection - device.stats.fr_decode)/1000;
                     int64_t process_time = (device.stats.fr_detection - device.stats.fr_start)/1000;
                     int64_t frame_time = fr_end - device.stats.last_frame;
                     device.stats.last_frame = fr_end;
