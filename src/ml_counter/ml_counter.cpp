@@ -15,6 +15,8 @@ void ml_counter_init(uint16_t detline[NUM_SUBFRAMES][2]) {
     sensor_t *s = esp_camera_sensor_get();
     assert(s->status.framesize == FRAMESIZE_240X240);
 
+    classifier = classify_rf_d40;
+
     memset(detline, PILL_NO, NUM_SUBFRAMES*2);
 }
 
@@ -22,7 +24,7 @@ void set_ml_model(uint8_t (*nclassifier)(uint8_t *)) {
     classifier = nclassifier;
 }
 
-uint16_t grid_division(dl_matrix3du_t *image_matrix) {
+uint16_t grid_division(const dl_matrix3du_t *const image_matrix) {
     uint16_t si = 0;
     uint16_t pctr = 0;
     uint8_t subframe[SUBFRAME_SIZE] = {0,};
@@ -46,7 +48,7 @@ uint16_t grid_division(dl_matrix3du_t *image_matrix) {
     return pctr;
 }
 
-uint16_t one_detection_line(dl_matrix3du_t *image_matrix, uint16_t *detline) {
+uint16_t one_detection_line(const dl_matrix3du_t *const image_matrix, uint16_t *detline) {
     uint16_t si = 0;
     uint16_t pctr = 0;
     uint16_t nframe = 0;
@@ -100,7 +102,7 @@ uint16_t one_detection_line(dl_matrix3du_t *image_matrix, uint16_t *detline) {
     return pctr;
 }
 
-uint16_t two_detection_lines(dl_matrix3du_t *image_matrix, uint16_t detline[NUM_SUBFRAMES][2]) {
+uint16_t two_detection_lines(const dl_matrix3du_t *const image_matrix, uint16_t detline[NUM_SUBFRAMES][2]) {
     uint16_t si = 0;
     uint16_t pctr = 0;
     uint16_t nframe = 0;
@@ -178,7 +180,7 @@ uint16_t two_detection_lines(dl_matrix3du_t *image_matrix, uint16_t detline[NUM_
 }
 
 /* One Detection line method with 1 frame hysteresys */
-uint16_t one_detection_line_hys1(dl_matrix3du_t *image_matrix, uint16_t *detline) {
+uint16_t one_detection_line_hys1(const dl_matrix3du_t *const image_matrix, uint16_t *detline) {
     uint16_t si = 0;
     uint16_t pctr = 0;
     uint16_t nframe = 0;

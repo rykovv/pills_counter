@@ -1,6 +1,6 @@
 #include "device/device.h"
 
-moving_avg_t * moving_avg_init(moving_avg_t *ma, size_t sample_size){
+moving_avg_t * moving_avg_init(moving_avg_t *ma, const size_t sample_size){
     memset(ma, 0, sizeof(moving_avg_t));
 
     ma->values = (int *)malloc(sample_size * sizeof(int));
@@ -13,7 +13,7 @@ moving_avg_t * moving_avg_init(moving_avg_t *ma, size_t sample_size){
     return ma;
 }
 
-int moving_avg_run (moving_avg_t *ma, int value){
+int moving_avg_run (moving_avg_t *ma, const int value){
     if (!ma->values) {
         return value;
     }

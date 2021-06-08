@@ -94,7 +94,7 @@ extern "C" {
  * 
  * @returns Pointer to initilized moving average struct.
 */
-moving_avg_t * moving_avg_init(moving_avg_t *ma, size_t sample_size);
+moving_avg_t * moving_avg_init(moving_avg_t *ma, const size_t sample_size);
 
 /**
  * @brief Function for updating the moving average.
@@ -107,7 +107,7 @@ moving_avg_t * moving_avg_init(moving_avg_t *ma, size_t sample_size);
  * 
  * @returns The moving average value.
 */
-int moving_avg_run(moving_avg_t *ma, int value);
+int moving_avg_run(moving_avg_t *ma, const int value);
 
 #ifdef __cplusplus
 }
