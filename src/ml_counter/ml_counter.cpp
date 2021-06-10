@@ -1,26 +1,38 @@
+/** @file   ml_counter.cpp
+ *  @brief  Counting modes functions and other constants definitions.
+ *
+ *  @author Vladislav Rykov
+ *  @bug    No known bugs.
+*/
+
 #include "ml_counter/ml_counter.h"
 #include "esp_camera.h"
 
+/** 
+ * @brief Subframe states associated to detection line(s) required for 
+ *          pills counting in detection line(s) modes. 
+*/
 typedef enum {
-    PILL_NO = 0,
-    PILL_DETECTED,
-    PILL_DISAPPEARED,
-    PILL_DISAPPEARED_HYS_1,
-    PILL_EXPECTED
+    PILL_NO = 0,            ///< No pill found.
+    PILL_DETECTED,          ///< Detected pill.
+    PILL_DISAPPEARED,       ///< Pill disappeared after detection.
+    PILL_DISAPPEARED_HYS_1, ///< Second frame confirmation of disappeared pill.
+    PILL_EXPECTED           ///< Expected pill state used in two detection lines mode.
 } pill_state_t;
 
-uint8_t (*classifier)(uint8_t *);
+uint8_t (*classifier)(const uint8_t *const ); ///< Local pointer to the currently used classification function.
 
 void ml_counter_init(uint16_t detline[NUM_SUBFRAMES][2]) {
     sensor_t *s = esp_camera_sensor_get();
     assert(s->status.framesize == FRAMESIZE_240X240);
 
+    /* Set Random Forest ML classification model that works best */
     classifier = classify_rf_d40;
 
     memset(detline, PILL_NO, NUM_SUBFRAMES*2);
 }
 
-void set_ml_model(uint8_t (*nclassifier)(uint8_t *)) {
+void set_ml_model(uint8_t (*nclassifier)(const uint8_t *const )) {
     classifier = nclassifier;
 }
 

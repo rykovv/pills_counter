@@ -1,3 +1,16 @@
+/** @file   httpd_server.cpp
+ *  @brief  httpd service initializer and endpoint handlers definitions.
+ *
+ *  There are several important features implemented in this file:
+ *      1. HTTP interface hosting
+ *      2. Device remote configuration
+ *      3. MJPG streaming
+ *      4. Providing endpoints to get counter value and device status
+ *
+ *  @author Vladislav Rykov
+ *  @bug    No known bugs.
+*/
+
 #include "httpd_server/httpd_server.h"
 
 #include "Arduino.h"

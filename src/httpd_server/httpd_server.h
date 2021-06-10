@@ -1,3 +1,13 @@
+/** @file   httpd_server.h
+ *  @brief  httpd service initialization header.
+ *
+ *  It is specifically requiried for sharing the device state and control struct
+ *  with the httpd monitor handler.
+ *
+ *  @author Vladislav Rykov
+ *  @bug    No known bugs.
+*/
+
 #ifndef HTTPD_SERVER_H
 #define HTTPD_SERVER_H
 

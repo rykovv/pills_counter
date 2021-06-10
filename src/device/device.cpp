@@ -1,3 +1,14 @@
+/** @file   device.cpp
+ *  @brief  Functions for image processing statistics.
+ *
+ *  Future versions of this file may contain more than 
+ *  image processing stats functions, i.e. general
+ *  device-related functions and initilizers.
+ *
+ *  @author Vladislav Rykov
+ *  @bug    No known bugs.
+*/
+
 #include "device/device.h"
 
 moving_avg_t * moving_avg_init(moving_avg_t *ma, const size_t sample_size){

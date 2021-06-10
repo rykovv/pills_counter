@@ -85,7 +85,7 @@ device_t device;    ///< Device status & control structure
  *      (strategy+classification), and updates 
  *      the counter value. Throughput is ~8 fps, 
  *      340% improvement with respect to the httpd monitored 
- *      mode. 
+ *      mode due to avoided RGB888 to JPG encoding.
  * 
  * @param[in] parameter Pointer to thread input args.
 */
@@ -255,10 +255,10 @@ void setup() {
 
     /* Moving average struct intialization */
     moving_avg_init(&device.stats.ma, MOVING_AVG_SAMPLES);
+
     /* Set detline vector to default values */
     ml_counter_init(device.shared.detline);
-    /* Set Random Forest ML classification model */
-    set_ml_model(classify_rf_d40);
+
     /* Start httpd monitor server */
     httpd_server_init(&device);
 

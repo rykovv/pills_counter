@@ -1,3 +1,15 @@
+/** @file   device.h
+ *  @brief  Constants, structs, and function prototypes related 
+ *          to the device (pills counter) functionality.
+ *
+ *  This header encompasses structs related to the device status
+ *  and configuration, image processing statistics, and shared data 
+ *  between httpd monitored and unattended tasks.
+ *
+ *  @author Vladislav Rykov
+ *  @bug    No known bugs.
+*/
+
 #ifndef DEVICE_H
 #define DEVICE_H
 
@@ -37,11 +49,11 @@ typedef struct {
  * @brief Moving average struct used for image processing stats 
 */
 typedef struct {
-        size_t size;    ///< Number of samples used for the average
-        size_t index;   ///< Next sample index
-        size_t count;   ///< Current number of samples
-        int sum;        ///< Sum of values to compute average over
-        int *values;    ///< Array of samples
+    size_t size;    ///< Number of samples used for the average
+    size_t index;   ///< Next sample index
+    size_t count;   ///< Current number of samples
+    int sum;        ///< Sum of values to compute average over
+    int *values;    ///< Array of samples
 } moving_avg_t;
 
 /** 
@@ -77,7 +89,7 @@ typedef struct {
     device_status_t status;                 ///< Device status
     device_stats_t stats;                   ///< Stats-related variables and struct
     shared_data_t shared;                   ///< Struct with shared data
-    volatile uint8_t httpd_monitored = 0;   ///< Variable for determining the mode of operation: unattended or httpd monitored.
+    volatile uint8_t httpd_monitored = 0;   ///< Variable for determining the mode of operation: 1-unattended, 0-httpd monitored.
 } device_t;
 
 #ifdef __cplusplus
