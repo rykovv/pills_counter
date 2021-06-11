@@ -24,12 +24,6 @@
 #include "dl_lib_matrix3d.h"
 
 
-typedef struct {
-        httpd_req_t *req;
-        size_t len;
-} jpg_chunking_t;
-
-
 #define PART_BOUNDARY "123456789000000000000987654321"
 static const char* _STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" PART_BOUNDARY;
 static const char* _STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
@@ -51,7 +45,7 @@ static esp_err_t pills_handler(httpd_req_t *req) {
     esp_err_t res = ESP_OK;
     char *ctr_str = (char *)malloc(sizeof(char)*10);
 
-    sprintf(ctr_str, "%llu", _dev->status.counter_value);
+    snprintf(ctr_str, 32, "%llu", _dev->status.counter_value);
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     res = httpd_resp_send(req, (const char *)ctr_str, strlen(ctr_str));
     
@@ -183,15 +177,14 @@ static esp_err_t counter_handler (httpd_req_t *req) {
     return res;
 }
 
-static esp_err_t cmd_handler(httpd_req_t *req){
-    char*  buf;
+static esp_err_t cmd_handler(httpd_req_t *req) {
     size_t buf_len;
     char variable[32] = {0,};
     char value[32] = {0,};
 
     buf_len = httpd_req_get_url_query_len(req) + 1;
     if (buf_len > 1) {
-        buf = (char*)malloc(buf_len);
+        char *buf = (char*)malloc(buf_len);
         if(!buf){
             httpd_resp_send_500(req);
             return ESP_FAIL;
@@ -238,11 +231,11 @@ static esp_err_t status_handler(httpd_req_t *req){
     char * p = json_response;
     *p++ = '{';
 
-    p+=sprintf(p, "\"c\":%u,", _dev->status.counter_enable); // Counter Enable
-    p+=sprintf(p, "\"ca\":%u,", (uint8_t)_dev->status.ca); // Counting Algorithm
-    p+=sprintf(p, "\"a\":%d,", _dev->status.alarm_enable); // Alarm Enable
-    p+=sprintf(p, "\"ac\":%llu,", _dev->status.alarm_count); // Alarm Count
-    p+=sprintf(p, "\"al\":\"%s\"", _dev->status.alarm_link); // Alarm Link
+    p+=snprintf(p, 20, "\"c\":%u,", _dev->status.counter_enable); // Counter Enable
+    p+=snprintf(p, 20, "\"ca\":%u,", (uint8_t)_dev->status.ca); // Counting Algorithm
+    p+=snprintf(p, 20, "\"a\":%d,", _dev->status.alarm_enable); // Alarm Enable
+    p+=snprintf(p, 32, "\"ac\":%llu,", _dev->status.alarm_count); // Alarm Count
+    p+=snprintf(p, ALARM_LINK_MAX_SIZE, "\"al\":\"%s\"", _dev->status.alarm_link); // Alarm Link
     *p++ = '}';
     *p++ = 0;
     
