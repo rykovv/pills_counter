@@ -43,7 +43,7 @@ static esp_err_t index_handler(httpd_req_t *req) {
 
 static esp_err_t pills_handler(httpd_req_t *req) {
     esp_err_t res = ESP_OK;
-    char *ctr_str = (char *)malloc(sizeof(char)*10);
+    char *ctr_str = (char *)malloc(sizeof(char)*32);
 
     snprintf(ctr_str, 32, "%llu", _dev->status.counter_value);
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
