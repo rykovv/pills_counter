@@ -18,4 +18,3 @@ workflows:
   main:
     jobs:
       - build
-      

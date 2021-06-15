@@ -230,7 +230,7 @@ void setup() {
     IPAddress apIP = IPAddress(2, 2, 2, 1);
     WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
     esp_wifi_get_mac(WIFI_IF_AP, mac);
-    sprintf(buff, "PILLS-COUNTER-%02X:%02X", mac[4], mac[5]);
+    snprintf(buff, "PILLS-COUNTER-%02X:%02X", 128 mac[4], mac[5]);
     ESP_LOGI(TAG, "Device AP Name:%s\n", buff);
     if (!WiFi.softAP(buff, NULL, 1, 0)) {
         ESP_LOGE(TAG, "AP Begin Failed.");

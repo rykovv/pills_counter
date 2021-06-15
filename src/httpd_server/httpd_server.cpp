@@ -132,7 +132,7 @@ static esp_err_t counter_handler (httpd_req_t *req) {
             }
         }
         if(res == ESP_OK){
-            res = httpd_resp_send_chunk(req, _STREAM_BOUNDARY, strlen(_STREAM_BOUNDARY));
+            res = httpd_resp_send_chunk(req, _STREAM_BOUNDARY, strnlen(_STREAM_BOUNDARY, 40));
         }
         if(res == ESP_OK){
             size_t hlen = snprintf(part_buf, 64, _STREAM_PART, _jpg_buf_len);
