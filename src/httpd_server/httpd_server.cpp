@@ -47,7 +47,7 @@ static esp_err_t pills_handler(httpd_req_t *req) {
 
     snprintf(ctr_str, 32, "%llu", _dev->status.counter_value);
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    res = httpd_resp_send(req, (const char *)ctr_str, strlen(ctr_str));
+    res = httpd_resp_send(req, (const char *)ctr_str, strnlen(ctr_str, 32));
     
     return res;
 }
@@ -58,7 +58,7 @@ static esp_err_t counter_handler (httpd_req_t *req) {
     esp_err_t res = ESP_OK;
     uint8_t *_jpg_buf = NULL;
     size_t _jpg_buf_len = 0;
-    char *part_buf[64];
+    char part_buf[64];
 
     _dev->httpd_monitored = 1;
 
@@ -135,8 +135,8 @@ static esp_err_t counter_handler (httpd_req_t *req) {
             res = httpd_resp_send_chunk(req, _STREAM_BOUNDARY, strlen(_STREAM_BOUNDARY));
         }
         if(res == ESP_OK){
-            size_t hlen = snprintf((char *)part_buf, 64, _STREAM_PART, _jpg_buf_len);
-            res = httpd_resp_send_chunk(req, (const char *)part_buf, hlen);
+            size_t hlen = snprintf(part_buf, 64, _STREAM_PART, _jpg_buf_len);
+            res = httpd_resp_send_chunk(req, part_buf, hlen);
         }
         if(res == ESP_OK){
             res = httpd_resp_send_chunk(req, (const char *)_jpg_buf, _jpg_buf_len);
@@ -210,11 +210,11 @@ static esp_err_t cmd_handler(httpd_req_t *req) {
 
     ESP_LOGD(TAG, "cmd_handler: '%s' -> '%s'\n", variable, value);
 
-    if(!strcmp(variable, "c")) _dev->status.counter_enable = (uint8_t) atoi(value);
-    else if(!strcmp(variable, "ca")) _dev->status.ca = (counting_algorithm_t) atoi(value);
-    else if(!strcmp(variable, "a")) _dev->status.alarm_enable = (uint8_t) atoi(value);
-    else if(!strcmp(variable, "ac")) _dev->status.alarm_count = (uint64_t) atoll(value);
-    else if(!strcmp(variable, "al")) strncpy(_dev->status.alarm_link, value, ALARM_LINK_MAX_SIZE);
+    if(!strcmp(variable, "c")) _dev->status.counter_enable = (uint8_t) (strtol(value, NULL, 2) % 2);
+    else if(!strcmp(variable, "ca")) _dev->status.ca = (counting_algorithm_t) (strtol(value, NULL, 10) % CA_MAX);
+    else if(!strcmp(variable, "a")) _dev->status.alarm_enable = (uint8_t) (strtol(value, NULL, 2) % 2);
+    else if(!strcmp(variable, "ac")) _dev->status.alarm_count = (uint64_t) strtol(value, NULL, 10);
+    else if(!strcmp(variable, "al")) strlcpy(_dev->status.alarm_link, value, ALARM_LINK_MAX_SIZE);
     else if(!strcmp(variable, "rc")) _dev->status.counter_value = 0; // reset counter
     else if(!strcmp(variable, "rd")) esp_restart(); // reset board
     else {
@@ -241,7 +241,7 @@ static esp_err_t status_handler(httpd_req_t *req){
     
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    return httpd_resp_send(req, json_response, strlen(json_response));
+    return httpd_resp_send(req, json_response, strnlen(json_response, 1024));
 }
 
 void httpd_server_init(device_t *ndev) {

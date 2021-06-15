@@ -320,7 +320,7 @@ void loop () {
     if (sample_flag) {
         /* Send JSON alarm if condition is met */
         if (device.status.alarm_enable && device.status.counter_value >= device.status.alarm_count
-                                        && strlen(device.status.alarm_link) > 10) 
+                                        && strnlen(device.status.alarm_link, ALARM_LINK_MAX_SIZE) > 10) 
         {
             // url correct form -> "http://<ip>:<port>/<path>/"
             esp_http_client_config_t config = {.url = device.status.alarm_link};
@@ -335,7 +335,7 @@ void loop () {
             );
             esp_http_client_handle_t client = esp_http_client_init(&config);
             esp_http_client_set_method(client, HTTP_METHOD_POST);
-            esp_http_client_set_post_field(client, alarm_json, strlen(alarm_json));
+            esp_http_client_set_post_field(client, alarm_json, strnlen(alarm_json, ALARM_JSON_SIZE));
             esp_http_client_set_header(client, "Content-Type", "application/json");
 
             esp_err_t err = esp_http_client_perform(client);

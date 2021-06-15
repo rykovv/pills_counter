@@ -758,6 +758,8 @@ float _compute_kernel(const uint8_t *const sample, ...) {
     for (uint16_t i = 0; i < 576; i++) {
         kernel += pow(sample[i] - va_arg(w, double), 2);
     }
+    
+    va_end(w);
 
     return exp(-0.001 * kernel);
 }

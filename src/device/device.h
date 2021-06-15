@@ -29,7 +29,8 @@ typedef enum {
     CA_GRID_DIVISION = 0,           ///< Grid division.
     CA_ONE_LINE_DETECTION,          ///< One line detection
     CA_ONE_LINE_DETECTION_HYS_1,    ///< One line detection with 1-frame hysteresys
-    CA_TWO_LINES_DETECTION          ///< Two lines detection
+    CA_TWO_LINES_DETECTION,         ///< Two lines detection
+    CA_MAX
 } counting_algorithm_t;
 
 /**
