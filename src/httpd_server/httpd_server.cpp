@@ -58,7 +58,7 @@ static esp_err_t counter_handler (httpd_req_t *req) {
     esp_err_t res = ESP_OK;
     uint8_t *_jpg_buf = NULL;
     size_t _jpg_buf_len = 0;
-    char part_buf[64];
+    char part_buf[128];
 
     _dev->httpd_monitored = 1;
 
@@ -135,7 +135,7 @@ static esp_err_t counter_handler (httpd_req_t *req) {
             res = httpd_resp_send_chunk(req, _STREAM_BOUNDARY, strnlen(_STREAM_BOUNDARY, 40));
         }
         if(res == ESP_OK){
-            size_t hlen = snprintf(part_buf, 64, _STREAM_PART, _jpg_buf_len);
+            size_t hlen = snprintf(part_buf, 128, _STREAM_PART, _jpg_buf_len);
             res = httpd_resp_send_chunk(req, part_buf, hlen);
         }
         if(res == ESP_OK){
@@ -153,22 +153,24 @@ static esp_err_t counter_handler (httpd_req_t *req) {
             break;
         }
 
-        int64_t fr_end = esp_timer_get_time();
-        int64_t conv_rgb888_time = (_dev->stats.fr_decode - _dev->stats.fr_start)/1000;
-        int64_t detection_time = (_dev->stats.fr_detection - _dev->stats.fr_decode)/1000;
-        int64_t encode_time = (_dev->stats.fr_encode - _dev->stats.fr_detection)/1000;
-        int64_t process_time = (_dev->stats.fr_encode - _dev->stats.fr_start)/1000;
-        int64_t frame_time = fr_end - _dev->stats.last_frame;
-        _dev->stats.last_frame = fr_end;
-        frame_time /= 1000;
-        uint32_t avg_frame_time = moving_avg_run(&_dev->stats.ma, frame_time);
+        if (_dev->status.counter_enable) {
+            int64_t fr_end = esp_timer_get_time();
+            int64_t conv_rgb888_time = (_dev->stats.fr_decode - _dev->stats.fr_start)/1000;
+            int64_t detection_time = (_dev->stats.fr_detection - _dev->stats.fr_decode)/1000;
+            int64_t encode_time = (_dev->stats.fr_encode - _dev->stats.fr_detection)/1000;
+            int64_t process_time = (_dev->stats.fr_encode - _dev->stats.fr_start)/1000;
+            int64_t frame_time = fr_end - _dev->stats.last_frame;
+            _dev->stats.last_frame = fr_end;
+            frame_time /= 1000;
+            uint32_t avg_frame_time = moving_avg_run(&_dev->stats.ma, frame_time);
 
-        ESP_LOGD(TAG, "MJPG: %uB %ums (%.1ffps), AVG: %ums (%.1ffps), %u+%u+%u=%u\n",
-            (uint32_t)(_jpg_buf_len),
-            (uint32_t)frame_time, 1000.0 / (uint32_t)frame_time,
-            avg_frame_time, 1000.0 / avg_frame_time,
-            (uint32_t)conv_rgb888_time, (uint32_t)detection_time, (uint32_t)encode_time, (uint32_t)process_time
-        );
+            ESP_LOGD(TAG, "MJPG: %uB %ums (%.1ffps), AVG: %ums (%.1ffps), %u+%u+%u=%u\n",
+                (uint32_t)(_jpg_buf_len),
+                (uint32_t)frame_time, 1000.0 / (uint32_t)frame_time,
+                avg_frame_time, 1000.0 / avg_frame_time,
+                (uint32_t)conv_rgb888_time, (uint32_t)detection_time, (uint32_t)encode_time, (uint32_t)process_time
+            );
+        }
     }
 
     ESP_LOGI(TAG, "Stream ended");

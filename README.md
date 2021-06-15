@@ -6,7 +6,7 @@
 
 Applying Computer Vision and Machine Learning (ML) at the very edge of embedded development. This project uses [TTGO T-CAMERA](https://www.electronics-lab.com/ttgo-t-camera-esp32-cam-board-oled-ai-capabilities/ "TTGO T-CAMERA") board based on ESP32 MCU for counting pills applying various ML techniques, such as Support Vector Machine (SVM) and Random Forest. Pills are just an example of what can be counted. The project has a modular structure and other classes and categories can be easily added.
 
-video sample goes here
+![Pills Counter Demo](demo/demo.gif)
 
 HTML monitor and configuration interface is provided. Counter enabling, mode, reset, and alarm can be set up. Alarms work sending a JSON message to an indicated HTTP endpoint when the alarm is enabled and introduced counter value has been reached.
 
@@ -35,13 +35,13 @@ All initial goals of the project have been met and the results are presented her
 
 ### Throughput
 
-The device works in two modes: HTTP monitored and Unattended. For the HTTP monitored mode the average is __3.3 fps__, and for the Unattended mode is __8fps__. Throughput depends on the operations listed in the table below. Memory access times are included in operations.
+The device works in two modes: HTTP monitored and Unattended. For the HTTP monitored mode the average is __4.2 fps__, and for the Unattended mode is __8.3fps__. Throughput depends on the operations listed in the table below. Memory access times are included in operations.
 
 | Operation | Average Time, ms | Mode | 
 |-----|-----|-----|
-| JPG -> RGB888 | 230 | Monitored and Unattended |
+| JPG -> RGB888 | 97 | Monitored and Unattended |
 | Classification Processing | 3 (RF), 989 (SVM) | Monitored and Unattended |
-| RGB888 -> JPG | 230 | Monitored only |
+| RGB888 -> JPG | 105 | Monitored only |
 
 ### Algorithms Efficiency
 

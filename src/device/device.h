@@ -17,7 +17,7 @@
 #include "esp_camera.h"
 #include "ml_counter/ml_counter.h"
 
-#define ALARM_LINK_MAX_SIZE     30      ///< Alarm HTTP link max length
+#define ALARM_LINK_MAX_SIZE     40      ///< Alarm HTTP link max length
 #define MOVING_AVG_SAMPLES      20      ///< Moving average window size
 
 /**

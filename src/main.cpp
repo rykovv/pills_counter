@@ -46,8 +46,8 @@
 #define BUTTON_1        34      ///< Board button
 
 #if !SOFTAP_MODE
-#define WIFI_SSID       "SpectrumSetup-28"  ///< SSID for WiFi connection
-#define WIFI_PASSWD     "heartylion234"     ///< Password for WiFi connection
+#define WIFI_SSID       "your_wifi_ssid"  ///< SSID for WiFi connection
+#define WIFI_PASSWD     "your_wifi_pass"  ///< Password for WiFi connection
 #endif
 
 /* Enabling OLED */
@@ -322,7 +322,7 @@ void loop () {
         if (device.status.alarm_enable && device.status.counter_value >= device.status.alarm_count
                                         && strnlen(device.status.alarm_link, ALARM_LINK_MAX_SIZE) > 10) 
         {
-            // url correct form -> "http://<ip>:<port>/<path>/"
+            // url correct form -> "http://<ip>:<port>/<path>"
             esp_http_client_config_t config = {.url = device.status.alarm_link};
 
             char *alarm_json = (char *)malloc(sizeof(char)*ALARM_JSON_SIZE);
