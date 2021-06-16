@@ -8,7 +8,7 @@ Applying Computer Vision and Machine Learning (ML) at the very edge of embedded 
 
 ![Pills Counter Demo](demo/counter_demo.gif)
 
-HTML monitor and configuration interface is provided. Counter enabling, mode, reset, and alarm can be set up. Alarms work sending a JSON message to an indicated HTTP endpoint when the alarm is enabled and introduced counter value has been reached.
+HTML monitor and configuration interface are provided. Counter enabling, mode, reset, and alarm can be set up. Alarms work sending a JSON message to an indicated HTTP endpoint when the alarm is enabled and introduced counter value has been reached.
 
 The device is intended to be installed over a production line/conveyor such as the whole belt width is captured by the camera sensor.
 
