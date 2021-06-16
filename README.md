@@ -6,7 +6,7 @@
 
 Applying Computer Vision and Machine Learning (ML) at the very edge of embedded development. This project uses [TTGO T-CAMERA](https://www.electronics-lab.com/ttgo-t-camera-esp32-cam-board-oled-ai-capabilities/ "TTGO T-CAMERA") board based on ESP32 MCU for counting pills applying various ML techniques, such as Support Vector Machine (SVM) and Random Forest. Pills are just an example of what can be counted. The project has a modular structure and other classes and categories can be easily added.
 
-![Pills Counter Demo](demo/demo.gif)
+![Pills Counter Demo](demo/counter_demo.gif)
 
 HTML monitor and configuration interface is provided. Counter enabling, mode, reset, and alarm can be set up. Alarms work sending a JSON message to an indicated HTTP endpoint when the alarm is enabled and introduced counter value has been reached.
 
